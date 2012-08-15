@@ -569,7 +569,7 @@ describe('vfs-local', function () {
     });
   });
 
-  describe('vfs.extend(), vfs.unextend(), vfs.use()', function () {
+  describe('vfs.extend()', function () {
     it("should extend using a local file", function (done) {
       vfs.extend("math", {file: __dirname + "/math.js"}, function (err, meta) {
         if (err) throw err;
@@ -612,6 +612,74 @@ describe('vfs-local', function () {
           expect(result).equal(3 + 4);
           vfs.unextend("math3", {}, done);
         });
+      });
+    });
+    it("should error with EEXIST if the same extension is added twice", function (done) {
+      vfs.extend("math", {file: __dirname + "/math.js"}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        vfs.extend("math", {file: __dirname + "/math.js"}, function (err, meta) {
+          expect(err).property("code").equal("EEXIST");
+          vfs.unextend("math", {}, done);
+        });
+      });
+    });
+    it("should allow a redefine if options.redefine is set", function (done) {
+      vfs.extend("test", {file: __dirname + "/math.js"}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        vfs.extend("test", {redefine: true, file: __dirname + "/math.js"}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("api").ok;
+          vfs.unextend("test", {}, done);
+        });
+      });
+    });
+  });
+
+  describe('vfs.unextend()', function () {
+    it("should remove an extension", function (done) {
+      vfs.extend("math7", {file: __dirname + "/math.js"}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        vfs.use("math7", {}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("api").ok;
+          vfs.unextend("math7", {}, function (err, meta) {
+            if (err) throw err;
+            vfs.use("math7", {}, function (err, meta) {
+              expect(err).property("code").equal("ENOENT");
+              done();
+            });
+          });
+        });
+      });
+    });
+  });
+
+  describe('vfs.use()', function () {
+    it("should load an existing api", function (done) {
+      vfs.extend("math4", {file: __dirname + "/math.js"}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        vfs.use("math4", {}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("api").ok;
+          var api = meta.api;
+          expect(api).property("add").a("function");
+          expect(api).property("multiply").a("function");
+          api.add(3, 4, function (err, result) {
+            if (err) throw err;
+            expect(result).equal(3 + 4);
+            vfs.unextend("math3", {}, done);
+          });
+        });
+      });
+    });
+    it("should error with ENOENT if the api doesn't exist", function (done) {
+      vfs.use("notfound", {}, function (err, meta) {
+        expect(err).property("code").equal("ENOENT");
+        done();
       });
     });
   });
