@@ -2,7 +2,7 @@
 
 [![Build Status](https://secure.travis-ci.org/c9/vfs-local.png?branch=master)](http://travis-ci.org/c9/vfs-local)
 
-VFS is an abstract interface for working with systems.  This module is the reference implementation and provides a vfs interface to the local system using node apis.
+VFS is an abstract interface for working with systems.  This module is the reference implementation and provides a vfs interface to the local system using node apis.  This is also often used in conjuction with `vfs-socket` to provide the vfs interface to a remote system over any kind of network socket.
 
 ## setup(fsOptions) -> vfs
 
