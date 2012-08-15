@@ -83,3 +83,11 @@ TODO: document this
 ## vfs.extend(name, options, callback)
 
 TODO: document this
+
+## vfs.unextend(name, options, callback)
+
+TODO: document this
+
+## vfs.use(name, options, callback)
+
+TODO: document this
