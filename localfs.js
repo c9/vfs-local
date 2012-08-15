@@ -694,7 +694,8 @@ module.exports = function setup(fsOptions) {
 
         // Or they can provide a readable stream
         else if (options.stream) {
-            consumeStream(options.stream, function (code) {
+            consumeStream(options.stream, function (err, code) {
+                if (err) return callback(err);
                 var fn;
                 try {
                     fn = evaluate(code);

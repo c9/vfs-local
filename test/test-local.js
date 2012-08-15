@@ -584,5 +584,36 @@ describe('vfs-local', function () {
         });
       });
     });
+    it("should extend using a string", function (done) {
+      var code = fs.readFileSync(__dirname + "/math.js", "utf8");
+      vfs.extend("math2", {code: code}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        var api = meta.api;
+        expect(api).property("add").a("function");
+        expect(api).property("multiply").a("function");
+        api.add(3, 4, function (err, result) {
+          if (err) throw err;
+          expect(result).equal(3 + 4);
+          vfs.unextend("math2", {}, done);
+        });
+      });
+    });
+    it("should extend using a stream", function (done) {
+      var stream = fs.createReadStream(__dirname + "/math.js");
+      vfs.extend("math3", {stream: stream}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        var api = meta.api;
+        expect(api).property("add").a("function");
+        expect(api).property("multiply").a("function");
+        api.add(3, 4, function (err, result) {
+          if (err) throw err;
+          expect(result).equal(3 + 4);
+          vfs.unextend("math3", {}, done);
+        });
+      });
+    });
   });
+
 });
