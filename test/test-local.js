@@ -568,4 +568,21 @@ describe('vfs-local', function () {
       }
     });
   });
+
+  describe('vfs.extend(), vfs.unextend(), vfs.use()', function () {
+    it("should extend using a local file", function (done) {
+      vfs.extend("math", {file: __dirname + "/math.js"}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("api").ok;
+        var api = meta.api;
+        expect(api).property("add").a("function");
+        expect(api).property("multiply").a("function");
+        api.add(3, 4, function (err, result) {
+          if (err) throw err;
+          expect(result).equal(3 + 4);
+          vfs.unextend("math", {}, done);
+        });
+      });
+    });
+  });
 });
