@@ -114,7 +114,9 @@ module.exports = function setup(fsOptions) {
         emit: emit,
 
         // Extending the API
-        extend: extend
+        extend: extend,
+        unextend: unextend,
+        use: use
     };
     return vfs;
 
@@ -664,64 +666,75 @@ module.exports = function setup(fsOptions) {
         callback && callback();
     }
 
-
-
     function extend(name, options, callback) {
 
-      var meta = {};
-      // Pull from cache if it's already loaded.
-      if (!options.skipCache && apis.hasOwnProperty(name)) {
-        meta.api = apis[name];
-        return callback(null, meta);
-      }
-
-      var fn;
-
-      // The user can pass in a path to a file to require
-      if (options.file) {
-        try { fn = require(options.file); }
-        catch (err) { return callback(err); }
-        fn(vfs, onEvaluate);
-      }
-
-      // User can pass in code as a pre-buffered string
-      else if (options.code) {
-        try { fn = evaluate(options.code); }
-        catch (err) { return callback(err); }
-        fn(vfs, onEvaluate);
-      }
-
-      // Or they can provide a readable stream
-      else if (options.stream) {
-        var stream = new MemStream();
-        options.stream.pipe(stream);
-        stream.on("done", function (code) {
-          var fn;
-          try {
-            fn = evaluate(code);
-          } catch(err) {
+        var meta = {};
+        // Pull from cache if it's already loaded.
+        if (!options.redefine && apis.hasOwnProperty(name)) {
+            var err = new Error("EEXIST: Extension API already defined for " + name);
+            err.code = "EEXIST";
             return callback(err);
-          }
-          fn(vfs, onEvaluate);
-        });
-      }
-
-      else {
-        return callback(new Error("must provide `file`, `code`, or `stream` when cache is empty for " + name));
-      }
-
-      function onEvaluate(err, exports) {
-        if (err) {
-          return callback(err);
         }
-        exports.names = Object.keys(exports);
-        exports.name = name;
-        apis[name] = exports;
-        meta.api = exports;
-        callback(null, meta);
-      }
+
+        var fn;
+
+        // The user can pass in a path to a file to require
+        if (options.file) {
+            try { fn = require(options.file); }
+            catch (err) { return callback(err); }
+            fn(vfs, onEvaluate);
+        }
+
+        // User can pass in code as a pre-buffered string
+        else if (options.code) {
+            try { fn = evaluate(options.code); }
+            catch (err) { return callback(err); }
+            fn(vfs, onEvaluate);
+        }
+
+        // Or they can provide a readable stream
+        else if (options.stream) {
+            consumeStream(options.stream, function (code) {
+                var fn;
+                try {
+                    fn = evaluate(code);
+                } catch(err) {
+                    return callback(err);
+                }
+                fn(vfs, onEvaluate);
+            });
+        }
+
+        else {
+            return callback(new Error("must provide `file`, `code`, or `stream` when cache is empty for " + name));
+        }
+
+        function onEvaluate(err, exports) {
+            if (err) {
+                return callback(err);
+            }
+            exports.names = Object.keys(exports);
+            exports.name = name;
+            apis[name] = exports;
+            meta.api = exports;
+            callback(null, meta);
+        }
 
     }
 
+    function unextend(name, options, callback) {
+        delete apis[name];
+        callback();
+    }
+
+    function use(name, options, callback) {
+        var api = apis[name];
+        if (!api) {
+            var err = new Error("ENOENT: There is no API extension named " + name);
+            err.code = "ENOENT";
+            return callback(err);
+        }
+        callback(null, {api:api});
+    }
 };
 
