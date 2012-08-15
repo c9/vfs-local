@@ -5,7 +5,7 @@
         { "name": "Fabian Jakobs", "email": "fabian@c9.io" }
     ],
     "name": "vfs-local",
-    "description": "A vfs implementation that works on the local filesystem, but with optional security constraints",
+    "description": "A vfs implementation that works on the local filesystem.",
     "version": "0.3.1",
     "repository": {
         "type": "git",
