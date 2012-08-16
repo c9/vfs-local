@@ -49,6 +49,10 @@ TODO: document this
 
 TODO: document this
 
+## vfs.rmfile(path, options, callback)
+
+TODO: document this
+
 ## vfs.rmdir(path, options, callback)
 
 TODO: document this
