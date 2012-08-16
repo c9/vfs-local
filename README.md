@@ -116,7 +116,7 @@ Options can include:
 
 ## vfs.symlink(path, options, callback)
 
-Create a special symlink file. `path` is the file to create and `options.target` is the symlink data.  No translation of the link data is done.  It's taken literally.
+Create a special symlink file at `path`.  The symlink data will be the value of `options.target`.  No translation of the link data is done.  It's taken literally.
 
 ## vfs.watch(path, options, callback)
 
