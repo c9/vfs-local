@@ -9,7 +9,12 @@ describe('vfs-local', function () {
 
   var vfs = require('vfs-lint')(require("vfs-local")({
     root: root,
+    defaultEnv: { CUSTOM: 43 },
     checkSymlinks: true
+  }));
+
+  var vfsLoose = require('vfs-lint')(require("vfs-local")({
+    root: root
   }));
 
   var fs = require('fs');
@@ -41,6 +46,14 @@ describe('vfs-local', function () {
     it('should error with ENOENT when the path is invalid', function (done) {
       vfs.resolve("/notexists.txt", {}, function (err, meta) {
         expect(err).property("code").equals("ENOENT");
+        done();
+      });
+    });
+    it('should not check fs when checkSymlinks is off', function (done) {
+      var vpath = "/badpath.txt";
+      vfsLoose.resolve(vpath, {}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("path").equal(base + vpath);
         done();
       });
     });
@@ -88,14 +101,82 @@ describe('vfs-local', function () {
       });
     });
     it("should error with ENOENT on missing files", function (done) {
-      vfs.readfile("/badfile.json", {}, function (err, stat) {
+      vfs.readfile("/badfile.json", {}, function (err, meta) {
         expect(err).property("code").equal("ENOENT");
         done();
       });
     });
     it("should error with EISDIR on directories", function (done) {
-      vfs.readfile("/", {}, function (err, stat) {
+      vfs.readfile("/", {}, function (err, meta) {
         expect(err).property("code").equal("EISDIR");
+        done();
+      });
+    });
+    it("should support head requests", function (done) {
+      vfs.readfile("/file.txt", {head:true}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("mime").equal("text/plain");
+        expect(meta).property("size").equal(23);
+        expect(meta).property("mime").ok;
+        expect(meta.stream).not.ok;
+        done();
+      });
+    });
+    it("should support 304 via etags", function (done) {
+      vfs.readfile("/file.txt", {head:true}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("etag").ok
+        var etag = meta.etag;
+        vfs.readfile("/file.txt", {etag:etag}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("mime").equal("text/plain");
+          expect(meta).property("size").equal(23);
+          expect(meta).property("notModified").ok;
+          expect(meta.stream).not.ok;
+          done();
+        });
+      });
+    });
+    it("should support range requests", function (done) {
+      vfs.readfile("/file.txt", {range:{start:1,end:3}}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("mime").equal("text/plain");
+        expect(meta).property("size").equal(3);
+        expect(meta).property("etag").ok;
+        expect(meta).property("partialContent").deep.equal({ start: 1, end: 3, size: 23 });
+        expect(meta).property("stream").ok;
+        var stream = meta.stream;
+        var chunks = [];
+        stream.on("data", function (chunk) {
+          chunks.push(chunk);
+        });
+        stream.on("end", function () {
+          var data = chunks.join("");
+          expect(data).equal("his");
+          done();
+        });
+      });
+    });
+    it("should support getting the last 10 bytes", function (done) {
+      vfs.readfile("/file.txt", {range:{end:10},head:true}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("size").equal(10);
+        expect(meta).property("etag").ok;
+        expect(meta).property("partialContent").deep.equal({ start: 13, end: 22, size: 23 });
+        done();
+      });
+    });
+    it("should get rangeNotSatifiable if start and end are both omitted", function (done) {
+      vfs.readfile("/file.txt", {range:{}}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("rangeNotSatisfiable");
+        done();
+      });
+    });
+    it("should get rangeNotSatifiable if start is after end", function (done) {
+      vfs.readfile("/file.txt", {range:{start:5,end:4}}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("rangeNotSatisfiable");
         done();
       });
     });
@@ -128,6 +209,27 @@ describe('vfs-local', function () {
       vfs.readdir("/file.txt", {}, function (err, meta) {
         expect(err).property("code").equal("ENOTDIR");
         done();
+      });
+    });
+    it("should support head requests", function (done) {
+      vfs.readdir("/", {head:true}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("etag").ok;
+        expect(meta.stream).not.ok;
+        done();
+      });
+    });
+    it("should support 304 via etags", function (done) {
+      vfs.readdir("/", {head:true}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("etag").ok
+        var etag = meta.etag;
+        vfs.readdir("/", {etag:etag}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("notModified").ok;
+          expect(meta.stream).not.ok;
+          done();
+        });
       });
     });
   });
@@ -232,7 +334,7 @@ describe('vfs-local', function () {
         done();
       });
     });
-    it("should error with EEXIST when the file already exists", function (done) {
+    it("should error with EEXIST when a file already exists at the path", function (done) {
       vfs.mkdir("/file.txt", {}, function (err, meta) {
         expect(err).property("code").equal("EEXIST");
         done();
@@ -270,7 +372,7 @@ describe('vfs-local', function () {
   });
 
   describe('vfs.rmdir()', function () {
-    it("should delete a file", function (done) {
+    it("should delete a directory", function (done) {
       var vpath = "/newdir";
       fs.mkdirSync(base + vpath);
       expect(fs.existsSync(base + vpath)).ok;
@@ -280,8 +382,8 @@ describe('vfs-local', function () {
         done();
       });
     });
-    it("should error with ENOENT if the file doesn't exist", function (done) {
-      var vpath = "/badname.txt";
+    it("should error with ENOENT if the directory doesn't exist", function (done) {
+      var vpath = "/baddir";
       expect(fs.existsSync(base + vpath)).not.ok;
       vfs.rmdir(vpath, {}, function (err, meta) {
         expect(err).property("code").equal("ENOENT");
@@ -293,6 +395,18 @@ describe('vfs-local', function () {
       expect(fs.existsSync(base + vpath)).ok;
       vfs.rmdir(vpath, {}, function (err, meta) {
         expect(err).property("code").equal("ENOTDIR");
+        done();
+      });
+    });
+    it("should do recursive deletes if options.recursive is set", function (done) {
+      fs.mkdirSync(base + "/foo");
+      fs.writeFileSync(base + "/foo/bar.txt", "Hello");
+      expect(fs.existsSync(base + "/foo")).ok;
+      expect(fs.existsSync(base + "/foo/bar.txt")).ok;
+      vfs.rmdir("/foo", {recursive:true}, function (err, meta) {
+        if (err) throw err;
+        expect(fs.existsSync(base + "/foo/bar.txt")).not.ok;
+        expect(fs.existsSync(base + "/foo")).not.ok;
         done();
       });
     });
@@ -482,6 +596,25 @@ describe('vfs-local', function () {
         child.stdin.write("echo me");
       });
     });
+    it("should have environment variables from process, fsOptions, and call", function (done) {
+      process.env.PROCESS = 42;
+      var args = ["-e", "console.log([process.env.PROCESS, process.env.CUSTOM, process.env.LOCAL].join(','))"];
+      vfs.spawn(process.execPath, {args:args, stdoutEncoding: "utf8", stderrEncoding: "utf8", env: {LOCAL:44}}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("process").ok;
+        var child = meta.process;
+        var stdout = [];
+        child.stdout.on("data", function (chunk) {
+          stdout.push(chunk);
+        });
+        child.stdout.on("end", function () {
+          stdout = stdout.join("");
+          expect(stdout).equal("42,43,44\n");
+          done();
+        });
+
+      });
+    });
   });
 
   describe('vfs.execFile()', function () {
@@ -491,6 +624,15 @@ describe('vfs-local', function () {
         if (err) throw err;
         expect(meta).property("stdout").equal(process.version + "\n");
         expect(meta).property("stderr").equal("");
+        done();
+      });
+    });
+    it("should have environment variables from process, fsOptions, and call", function (done) {
+      process.env.PROCESS = 42;
+      var args = ["-e", "console.log([process.env.PROCESS, process.env.CUSTOM, process.env.LOCAL].join(','))"];
+      vfs.execFile(process.execPath, {args:args, env: {LOCAL:44}}, function (err, meta) {
+        if (err) throw err;
+        expect(meta).property("stdout").equal("42,43,44\n");
         done();
       });
     });
