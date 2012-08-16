@@ -135,32 +135,56 @@ Options can include:
 
 ## vfs.spawn(executablePath, options, callback)
 
-TODO: document this
+Spawns a child process and returns a process object complete with three stdio streams. Wraps node's `child_process.spawn`.
+
+The `executablePath` is a pre-resolved path.  It will not get prefixed.  So if you want a relative path within the vfs root, use `vfs.resolve()`.
+
+Options can include:
+
+ - `args`: An array of args to pass to the executable.
+ - `stdoutEncoding`: The encoding to use on the stdout stream.
+ - `stderrEncoding`: The encoding to use on the stderr stream.
+ - Any other options you want to pass through to node's `child_process.spawn` (`env`, ...)
+
+Meta will contain:
+
+ - `process`: The child process.  This will have `stdin`, `stdout`, and `stderr` stream properties s as well as emit some events itself.
 
 ## vfs.execFile(executablePath, options, callback)
 
-TODO: document this
+Execute a process and buffers the output till the process exist.  Don't use this on anything that will output substantial data or run for a long time.  Wraps node's `child_process.execFile`.
+
+The options are the same as `vfs.spawn()`.
+
+Meta will contain:
+
+ - `stdout`: The buffered stdout data.
+ - `stderr`: The buffered stderr data.
 
 ## vfs.on(event, handler, callback)
 
-TODO: document this
+Listen for custom vfs events. `event` is a string identifier for the event type.  `handler` is a function that will get called every time the event is emitted.  `callback` will be called once the registration is complete.  This is required since vfs is usually used over some async socket transport.
 
 ## vfs.off(event, handler, callback)
 
-TODO: document this
+Remove an event handler.  The arguments are the same as `vfs.on`, but remove the listener instead of registering it.
 
 ## vfs.emit(event, value, callback)
 
-TODO: document this
+Emit an event to all listening handlers.  The callback means that the event was sent to all handlers, but they may not have received it yet if their transport is slower than yours.
 
 ## vfs.extend(name, options, callback)
 
-TODO: document this
+This API is provided to extend the capabilities of vfs.  This is useful for when the vfs is on a remote filesystem and you want to run some custom node code there.
+
+See the unit tests for docs.
+
+TODO: document this better
 
 ## vfs.unextend(name, options, callback)
 
-TODO: document this
+Remove an extension by name.
 
 ## vfs.use(name, options, callback)
 
-TODO: document this
+Get a reference to an existing vfs extension api.
