@@ -64,7 +64,6 @@ module.exports = function setup(fsOptions) {
         unextend: unextend,
         use: use
     };
-    return vfs;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -439,7 +438,7 @@ module.exports = function setup(fsOptions) {
     function rmdir(path, options, callback) {
         if (options.recursive) {
             remove(path, function(path, callback) {
-                exec("rm", {args: ["-rf", path]}, callback);
+                execFile("rm", {args: ["-rf", path]}, callback);
             }, callback);
         }
         else {
@@ -575,7 +574,14 @@ module.exports = function setup(fsOptions) {
     }
 
     function execFile(executablePath, options, callback) {
-        childProcess.execFile(executablePath, options.args || [], function (err, stdout, stderr) {
+
+        if (options.hasOwnProperty('env')) {
+            options.env.__proto__ = fsOptions.defaultEnv;
+        } else {
+            options.env = fsOptions.defaultEnv;
+        }
+
+        childProcess.execFile(executablePath, options.args || [], options, function (err, stdout, stderr) {
             if (err) return callback(err);
             callback(null, {
                 stdout: stdout,
@@ -682,6 +688,11 @@ module.exports = function setup(fsOptions) {
         }
         callback(null, {api:api});
     }
+
+////////////////////////////////////////////////////////////////////////////////
+
+    return vfs;
+
 };
 
 // Consume all data in a readable stream and call callback with full buffer.
