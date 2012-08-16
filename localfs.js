@@ -9,60 +9,6 @@ var Stream = require('stream').Stream;
 var getMime = require('simple-mime')("application/octet-stream");
 var vm = require('vm');
 
-// Consume all data in a readable stream and call callback with full buffer.
-function consumeStream(stream, callback) {
-    var chunks = [];
-    stream.on("data", onData);
-    stream.on("end", onEnd);
-    stream.on("error", onError);
-    function onData(chunk) {
-        chunks.push(chunk);
-    }
-    function onEnd() {
-        cleanup();
-        callback(null, chunks.join(""));
-    }
-    function onError(err) {
-        cleanup();
-        callback(err);
-    }
-    function cleanup() {
-        stream.removeListener("data", onData);
-        stream.removeListener("end", onEnd);
-        stream.removeListener("error", onError);
-    }
-}
-
-// node-style eval
-function evaluate(code) {
-    var exports = {};
-    var module = { exports: exports };
-    vm.runInNewContext(code, {
-        require: require,
-        exports: exports,
-        module: module,
-        console: console,
-        global: global,
-        process: process,
-        Buffer: Buffer,
-        setTimeout: setTimeout,
-        clearTimeout: clearTimeout,
-        setInterval: setInterval,
-        clearInterval: clearInterval
-    }, "dynamic-" + Date.now().toString(36), true);
-    return module.exports;
-}
-
-// Calculate a proper etag from a nodefs stat object
-function calcEtag(stat) {
-  return (stat.isFile() ? '': 'W/') + '"' + (stat.ino || 0).toString(36) + "-" + stat.size.toString(36) + "-" + stat.mtime.valueOf().toString(36) + '"';
-}
-
-// @fsOptions can have:
-//   fsOptions.umask - default umask for creating files (defaults to 0750)
-//   fsOptions.defaultEnv - a shallow hash of env values to inject into child processes.
-//   fsOptions.root - root path to mount, this needs to be realpath'ed or it won't work.
-//   fsOptions.checkSymlinks - resolve symlinks before checking if a path is within the root. (defaults to false)
 module.exports = function setup(fsOptions) {
 
     // Check and configure options
@@ -167,7 +113,6 @@ module.exports = function setup(fsOptions) {
                 entry.err = err;
                 return callback(entry);
             } else {
-                entry.access = stat.access;
                 entry.size = stat.size;
                 entry.mtime = stat.mtime.valueOf();
 
@@ -739,3 +684,51 @@ module.exports = function setup(fsOptions) {
     }
 };
 
+// Consume all data in a readable stream and call callback with full buffer.
+function consumeStream(stream, callback) {
+    var chunks = [];
+    stream.on("data", onData);
+    stream.on("end", onEnd);
+    stream.on("error", onError);
+    function onData(chunk) {
+        chunks.push(chunk);
+    }
+    function onEnd() {
+        cleanup();
+        callback(null, chunks.join(""));
+    }
+    function onError(err) {
+        cleanup();
+        callback(err);
+    }
+    function cleanup() {
+        stream.removeListener("data", onData);
+        stream.removeListener("end", onEnd);
+        stream.removeListener("error", onError);
+    }
+}
+
+// node-style eval
+function evaluate(code) {
+    var exports = {};
+    var module = { exports: exports };
+    vm.runInNewContext(code, {
+        require: require,
+        exports: exports,
+        module: module,
+        console: console,
+        global: global,
+        process: process,
+        Buffer: Buffer,
+        setTimeout: setTimeout,
+        clearTimeout: clearTimeout,
+        setInterval: setInterval,
+        clearInterval: clearInterval
+    }, "dynamic-" + Date.now().toString(36), true);
+    return module.exports;
+}
+
+// Calculate a proper etag from a nodefs stat object
+function calcEtag(stat) {
+  return (stat.isFile() ? '': 'W/') + '"' + (stat.ino || 0).toString(36) + "-" + stat.size.toString(36) + "-" + stat.mtime.valueOf().toString(36) + '"';
+}

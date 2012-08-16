@@ -671,7 +671,7 @@ describe('vfs-local', function () {
           api.add(3, 4, function (err, result) {
             if (err) throw err;
             expect(result).equal(3 + 4);
-            vfs.unextend("math3", {}, done);
+            vfs.unextend("math4", {}, done);
           });
         });
       });
