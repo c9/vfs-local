@@ -676,7 +676,7 @@ module.exports = function setup(fsOptions) {
 
     function unextend(name, options, callback) {
         delete apis[name];
-        callback();
+        callback(null, {});
     }
 
     function use(name, options, callback) {
