@@ -166,14 +166,14 @@ describe('vfs-local', function () {
         done();
       });
     });
-    it("should get rangeNotSatifiable if start and end are both omitted", function (done) {
+    it("should get rangeNotSatisfiable if start and end are both omitted", function (done) {
       vfs.readfile("/file.txt", {range:{}}, function (err, meta) {
         if (err) throw err;
         expect(meta).property("rangeNotSatisfiable");
         done();
       });
     });
-    it("should get rangeNotSatifiable if start is after end", function (done) {
+    it("should get rangeNotSatisfiable if start is after end", function (done) {
       vfs.readfile("/file.txt", {range:{start:5,end:4}}, function (err, meta) {
         if (err) throw err;
         expect(meta).property("rangeNotSatisfiable");
@@ -265,7 +265,7 @@ describe('vfs-local', function () {
         var writable = meta.stream;
         var readable = fs.createReadStream(__filename);
         readable.pipe(writable);
-        writable.on("saved", function () {
+        writable.on("close", function () {
           var actual = fs.readFileSync(base + vpath, "utf8");
           var original = fs.readFileSync(__filename, "utf8");
           fs.unlinkSync(base + vpath);
