@@ -6,7 +6,7 @@
     ],
     "name": "vfs-local",
     "description": "A vfs implementation that works on the local filesystem.",
-    "version": "0.3.4",
+    "version": "0.3.5",
     "repository": {
         "type": "git",
         "url": "git://github.com/c9/vfs-local.git"
