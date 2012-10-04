@@ -636,6 +636,15 @@ describe('vfs-local', function () {
         done();
       });
     });
+    it("should return stdout and stderr on the error object", function(done) {
+      var args = ["-e", "console.error('error'); console.log('out'); process.exit(1);"];
+      vfs.execFile(process.execPath, {args:args}, function (err, meta) {
+        expect(err).property("stderr").equal("error\n");
+        expect(err).property("stdout").equal("out\n");
+        expect(err).property("code").equal(1);
+        done();
+      });
+    });
   });
 
   describe('vfs.on(), vfs.off(), vfs.emit()', function () {

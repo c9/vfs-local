@@ -582,9 +582,15 @@ module.exports = function setup(fsOptions) {
         }
 
         childProcess.execFile(executablePath, options.args || [], options, function (err, stdout, stderr) {
-            callback(err, {
-                stdout: stdout || "",
-                stderr: stderr || ""
+            if (err) {
+                err.stderr = stderr;
+                err.stdout = stdout;
+                return callback(err);
+            }
+
+            callback(null, {
+                stdout: stdout,
+                stderr: stderr
             });
         });
     }
