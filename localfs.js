@@ -516,7 +516,11 @@ module.exports = function setup(fsOptions) {
                 };
             }
             else {
-                meta.watcher = fs.watch(path, options, function () {});
+                try {
+                    meta.watcher = fs.watch(path, options, function () {});
+                } catch (e) {
+                    return callback(e);
+                }
             }
             callback(null, meta);
         });
