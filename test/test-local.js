@@ -545,6 +545,14 @@ describe('vfs-local', function () {
         fs.writeFileSync(base + vpath, "newfile!");
       });
     });
+    it("should return error if path does not exist", function(done) {
+      var vpath = "/newfile.txt";
+      expect(fs.existsSync(base + vpath)).not.ok;
+      vfs.watch(base + vpath, {file: false}, function (err, meta) {
+        expect(err).ok;
+        done();
+      });
+    });
   });
 
   describe('vfs.connect()', function () {
@@ -612,7 +620,6 @@ describe('vfs-local', function () {
           expect(stdout).equal("42,43,44\n");
           done();
         });
-
       });
     });
   });
