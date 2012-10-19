@@ -222,7 +222,7 @@ describe('vfs-local', function () {
     it("should support 304 via etags", function (done) {
       vfs.readdir("/", {head:true}, function (err, meta) {
         if (err) throw err;
-        expect(meta).property("etag").ok
+        expect(meta).property("etag").ok;
         var etag = meta.etag;
         vfs.readdir("/", {etag:etag}, function (err, meta) {
           if (err) throw err;

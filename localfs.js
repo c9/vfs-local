@@ -130,6 +130,11 @@ module.exports = function setup(fsOptions) {
                     return callback(entry);
                 }
                 fs.readlink(fullpath, function (err, link) {
+                    if (entry.name == link) {
+                        entry.linkStatErr = "ELOOP: recursive symlink";
+                        return callback(entry);
+                    }
+
                     if (err) {
                         entry.linkErr = err.stack;
                         return callback(entry);
