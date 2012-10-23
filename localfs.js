@@ -3,6 +3,7 @@ var net = require('net');
 var childProcess = require('child_process');
 var join = require('path').join;
 var pathResolve = require('path').resolve;
+var pathNormalize = require('path').normalize;
 var dirname = require('path').dirname;
 var basename = require('path').basename;
 var Stream = require('stream').Stream;
@@ -11,11 +12,15 @@ var vm = require('vm');
 
 module.exports = function setup(fsOptions) {
 
+    // Get the separator char. In Node 0.8, we can use path.sep instead
+    var pathSep = pathNormalize("/");
+
     // Check and configure options
     var root = fsOptions.root;
     if (!root) throw new Error("root is a required option");
-    if (root[0] !== "/") throw new Error("root path must start in /");
-    if (root[root.length - 1] !== "/") root += "/";
+    var root = pathNormalize(root);
+    if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
+    if (root[root.length - 1] !== pathSep) root += pathSep;
     var base = root.substr(0, root.length - 1);
     var umask = fsOptions.umask || 0750;
     if (fsOptions.hasOwnProperty('defaultEnv')) {
