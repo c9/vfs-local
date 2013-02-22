@@ -1,19 +1,25 @@
 /*global describe:false, it:false */
 
 var expect = require('chai').expect;
+var platform = require('os').platform();
+var vfs_local = require("../localfs.js");
+var path      = require("path");
+
+var STAT_SIZE = platform.match(/^win/) ? 24 : 23;
+var EOL       = platform.match(/^win/) ? "\r\n" : "\n";
 
 describe('vfs-local', function () {
 
-  var root = __dirname + "/mock/";
-  var base = root.substr(0, root.length - 1);
+  var root = path.join(__dirname, "mock");
+  var base = root.substr(0, root.length);
 
-  var vfs = require('vfs-lint')(require("vfs-local")({
+  var vfs = require('vfs-lint')(vfs_local({
     root: root,
     defaultEnv: { CUSTOM: 43 },
     checkSymlinks: true
   }));
 
-  var vfsLoose = require('vfs-lint')(require("vfs-local")({
+  var vfsLoose = require('vfs-lint')(vfs_local({
     root: root
   }));
 
@@ -22,10 +28,10 @@ describe('vfs-local', function () {
 
   describe('vfs.resolve()', function () {
     it('should prepend root when resolving virtual paths', function (done) {
-      var vpath = "/dir/stuff.json";
+      var vpath = path.join("dir", "stuff.json");
       vfs.resolve(vpath, {}, function (err, meta) {
         if (err) throw err;
-        expect(meta).property("path").equals(base + vpath);
+        expect(meta).property("path").equals(path.join(base, vpath));
         done();
       });
     });
@@ -36,10 +42,10 @@ describe('vfs-local', function () {
       });
     });
     it('should not prepend when already rooted', function (done) {
-      var path = base + "/file.txt";
-      vfs.resolve(path, { alreadyRooted: true }, function (err, meta) {
+      var vpath = path.join(base, "file.txt");
+      vfs.resolve(vpath, { alreadyRooted: true }, function (err, meta) {
         if (err) throw err;
-        expect(meta).property("path").equal(path);
+        expect(meta).property("path").equal(vpath);
         done();
       });
     });
@@ -53,7 +59,7 @@ describe('vfs-local', function () {
       var vpath = "/badpath.txt";
       vfsLoose.resolve(vpath, {}, function (err, meta) {
         if (err) throw err;
-        expect(meta).property("path").equal(base + vpath);
+        expect(meta).property("path").equal(path.join(base, vpath));
         done();
       });
     });
@@ -64,7 +70,7 @@ describe('vfs-local', function () {
       vfs.stat("/file.txt", {}, function (err, stat) {
         if (err) throw err;
         expect(stat).property("name").equal("file.txt");
-        expect(stat).property("size").equal(23);
+        expect(stat).property("size").equal(STAT_SIZE);
         expect(stat).property("mime").equal("text/plain");
         done();
       });
@@ -82,7 +88,7 @@ describe('vfs-local', function () {
       vfs.readfile("/file.txt", {}, function (err, meta) {
         if (err) throw err;
         expect(meta).property("mime").equals("text/plain");
-        expect(meta).property("size").equals(23);
+        expect(meta).property("size").equals(STAT_SIZE);
         expect(meta).property("etag");
         expect(meta).property("stream").property("readable");
         var stream = meta.stream;
@@ -93,9 +99,9 @@ describe('vfs-local', function () {
           length += chunk.length;
         });
         stream.on("end", function () {
-          expect(length).equal(23);
+          expect(length).equal(STAT_SIZE);
           var body = chunks.join("");
-          expect(body).equal("This is a simple file!\n");
+          expect(body).equal("This is a simple file!" + EOL);
           done();
         });
       });
@@ -116,7 +122,7 @@ describe('vfs-local', function () {
       vfs.readfile("/file.txt", {head:true}, function (err, meta) {
         if (err) throw err;
         expect(meta).property("mime").equal("text/plain");
-        expect(meta).property("size").equal(23);
+        expect(meta).property("size").equal(STAT_SIZE);
         expect(meta).property("mime").ok;
         expect(meta.stream).not.ok;
         done();
@@ -130,7 +136,7 @@ describe('vfs-local', function () {
         vfs.readfile("/file.txt", {etag:etag}, function (err, meta) {
           if (err) throw err;
           expect(meta).property("mime").equal("text/plain");
-          expect(meta).property("size").equal(23);
+          expect(meta).property("size").equal(STAT_SIZE);
           expect(meta).property("notModified").ok;
           expect(meta.stream).not.ok;
           done();
@@ -143,7 +149,7 @@ describe('vfs-local', function () {
         expect(meta).property("mime").equal("text/plain");
         expect(meta).property("size").equal(3);
         expect(meta).property("etag").ok;
-        expect(meta).property("partialContent").deep.equal({ start: 1, end: 3, size: 23 });
+        expect(meta).property("partialContent").deep.equal({ start: 1, end: 3, size: STAT_SIZE });
         expect(meta).property("stream").ok;
         var stream = meta.stream;
         var chunks = [];
@@ -162,7 +168,14 @@ describe('vfs-local', function () {
         if (err) throw err;
         expect(meta).property("size").equal(10);
         expect(meta).property("etag").ok;
-        expect(meta).property("partialContent").deep.equal({ start: 13, end: 22, size: 23 });
+
+        if (platform.match(/^win/)) {
+          expect(meta).property("partialContent").deep.equal({ start: 14, end: 23, size: STAT_SIZE });
+        }
+        else {
+          expect(meta).property("partialContent").deep.equal({ start: 13, end: 22, size: STAT_SIZE });
+        }
+        
         done();
       });
     });
@@ -205,8 +218,10 @@ describe('vfs-local', function () {
         done();
       });
     });
-    it("should error with ENOTDIR when the path is a file", function (done) {
-      vfs.readdir("/file.txt", {}, function (err, meta) {
+    it("should error with ENOTDIR when the path is a file (or ENOENT on Windows)", function (done) {
+      // see https://github.com/joyent/node/issues/1869
+      var error_code = platform.match(/^win/) ? "ENOENT" : "ENOTDIR";
+      vfs.readdir("./file.txt", {}, function (err, meta) {
         expect(err).property("code").equal("ENOTDIR");
         done();
       });
@@ -274,7 +289,7 @@ describe('vfs-local', function () {
         });
       });
     });
-    it("should update an existing file using readble in options", function (done) {
+    it("should update an existing file using readable in options", function (done) {
       var vpath = "/changeme.txt";
       var stream = fs.createReadStream(__filename);
       fs.writeFileSync(base + vpath, "Original Content\n");
@@ -489,8 +504,8 @@ describe('vfs-local', function () {
   describe('vfs.symlink()', function () {
     it("should create a symlink", function (done) {
       var target = "file.txt";
-      var vpath = "/newlink.txt";
-      var text = fs.readFileSync(root + target, "utf8");
+      var vpath = "newlink.txt";
+      var text = fs.readFileSync(path.join(root, target), "utf8");
       vfs.symlink(vpath, {target: target}, function (err, meta) {
         if (err) throw err;
         expect(fs.readFileSync(base + vpath, "utf8")).equal(text);
