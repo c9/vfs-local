@@ -594,7 +594,6 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
-
         childProcess.execFile(executablePath, options.args || [], options, function (err, stdout, stderr) {
             if (err) {
                 err.stderr = stderr;
