@@ -338,6 +338,7 @@ module.exports = function setup(fsOptions) {
         var meta = {};
         var called;
         var callback = function (err, meta) {
+            meta = meta || {};
             if (called) {
                 if (err) {
                     if (meta.stream) meta.stream.emit("error", err);
