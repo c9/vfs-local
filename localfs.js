@@ -337,7 +337,7 @@ module.exports = function setup(fsOptions) {
     function mkfile(path, options, realCallback) {
         var meta = {};
         var called;
-        var callback = function (err, meta) {
+        var callback = function (err) {
             if (called) {
                 if (err) {
                     if (meta.stream) meta.stream.emit("error", err);
@@ -347,7 +347,7 @@ module.exports = function setup(fsOptions) {
                 return;
             }
             called = true;
-            return realCallback.apply(this, arguments);
+            return realCallback(err, meta);
         };
 
         if (options.stream && !options.stream.readable) {
@@ -396,23 +396,27 @@ module.exports = function setup(fsOptions) {
         });
 
         function onPath(path) {
+            var hadError;
+            
             if (!options.mode) options.mode = umask & 0666;
             var writable = new fs.WriteStream(path, options);
             if (readable) {
                 readable.pipe(writable);
             }
             else {
-                meta.stream = writable;
-                callback(null, meta);
+                writable.on('open', function () {
+                    if (hadError) return;
+                    meta.stream = writable;
+                    callback();
+                });
             }
-            var hadError;
-            writable.once('error', function (err) {
+            writable.on('error', function (err) {
                 hadError = true;
                 error(err);
             });
             writable.on('close', function () {
                 if (hadError) return;
-                callback(null, meta);
+                callback();
             });
 
             if (readable) {
