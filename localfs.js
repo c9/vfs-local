@@ -11,7 +11,12 @@ var getMime = require('simple-mime')("application/octet-stream");
 var vm = require('vm');
 
 module.exports = function setup(fsOptions) {
-
+    try {
+        var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
+    } catch(e) {
+        console.warn("unable to initialize pty.js", e);
+        pty = function(){};
+    }
     // Get the separator char. In Node 0.8, we can use path.sep instead
     var pathSep = pathNormalize("/");
 
@@ -57,6 +62,7 @@ module.exports = function setup(fsOptions) {
 
         // Process Management
         spawn: spawn,
+        pty: ptyspawn,
         execFile: execFile,
 
         // Basic async event emitter style API
@@ -499,10 +505,72 @@ module.exports = function setup(fsOptions) {
         else {
             return callback(new Error("Must specify either options.from or options.to"));
         }
-        readfile(from, {}, function (err, meta) {
-            if (err) return callback(err);
-            mkfile(to, {stream: meta.stream}, callback);
-        });
+        
+        if (!options.overwrite) {
+            resolvePath(to, function(err, path){
+                if (err) return callback(err);
+                
+                fs.stat(path, function(err, stat){
+                    if (!err && stat && !stat.err) {
+                        var path = to.replace(/(?:\.([\d+]))?(\.[^\.]*)?$/, function(m, d, e){
+                            return "." + (parseInt(d, 10)+1 || 1) + (e ? e : "");
+                        });
+                        
+                        copy(from, {
+                            to        : path, 
+                            overwrite : false, 
+                            recursive : options.recursive
+                        }, callback);
+                    }
+                    else {
+                        innerCopy(from, to);
+                    }
+                });
+            });
+        }
+        else {
+            innerCopy(from, to);
+        }
+        
+        function innerCopy(from, to) {
+            if (options.recursive) {
+                resolvePath(from, function(err, rFrom){
+                    resolvePath(to, function(err, rTo){
+                        spawn("cp", {
+                            args: [ "-a", rFrom, rTo ],
+                            stdoutEncoding : "utf8",
+                            stderrEncoding : "utf8",
+                            stdinEncoding : "utf8"
+                        }, function(err, child){
+                            if (err) return callback(err);
+                            
+                            var proc = child.process;
+                            proc.stderr.on("data", function(d){
+                                if (d)
+                                    callback(new Error(d));
+                            });
+                            proc.stdout.on("end", function() {
+                                callback(null, {
+                                    to: to,
+                                    meta: null
+                                });
+                            });
+                        });
+                    });
+                });
+            }
+            else {
+                readfile(from, {}, function (err, meta) {
+                    if (err) return callback(err);
+                    mkfile(to, {stream: meta.stream}, function (err, meta) {
+                        callback(err, {
+                            to: to,
+                            meta: meta
+                        })
+                    });
+                });
+            }
+        }
     }
 
     function symlink(path, options, callback) {
@@ -512,9 +580,12 @@ module.exports = function setup(fsOptions) {
         resolvePath(dirname(path), function (err, dir) {
             if (err) return callback(err);
             path = join(dir, basename(path));
-            fs.symlink(options.target, path, function (err) {
-                if (err) return callback(err);
-                callback(null, meta);
+            
+            resolvePath(options.target, function (err, target) {
+                fs.symlink(target, path, function (err) {
+                    if (err) return callback(err);
+                    callback(null, meta);
+                });
             });
         });
     }
@@ -571,7 +642,7 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
-
+        
         var child;
         try {
             child = childProcess.spawn(executablePath, args, options);
@@ -588,6 +659,32 @@ module.exports = function setup(fsOptions) {
 
         callback(null, {
             process: child
+        });
+    }
+    
+    function ptyspawn(executablePath, options, callback) {
+        var args = options.args || [];
+        delete options.args;
+        
+        if (options.hasOwnProperty('env')) {
+            options.env.__proto__ = fsOptions.defaultEnv;
+        } else {
+            options.env = fsOptions.defaultEnv;
+        }
+
+        try {
+            var proc = pty.spawn(executablePath, args, options);
+            proc.on("error", function(){
+                // Prevent PTY from throwing an error;
+                // I don't know how to test and the src is funky because
+                // it tests for .length < 2. Who is setting the other event?
+            });
+        } catch (err) {
+            return callback(err);
+        }
+        
+        callback(null, {
+            pty: proc
         });
     }
 
