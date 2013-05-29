@@ -671,6 +671,12 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
+        
+        // Pty is only reading from the object itself;
+        var env = {};
+        for (var prop in options.env)
+            env[prop] = options.env[prop];
+        options.env = env;
 
         try {
             var proc = pty.spawn(executablePath, args, options);
@@ -695,7 +701,7 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
-
+        
         childProcess.execFile(executablePath, options.args || [], options, function (err, stdout, stderr) {
             if (err) {
                 err.stderr = stderr;
