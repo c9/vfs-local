@@ -674,8 +674,10 @@ module.exports = function setup(fsOptions) {
         
         // Pty is only reading from the object itself;
         var env = {};
-        for (var prop in options.env)
+        for (var prop in options.env) {
+            if (prop == "TMUX") continue;
             env[prop] = options.env[prop];
+        }
         options.env = env;
 
         try {
