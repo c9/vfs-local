@@ -21,6 +21,9 @@ module.exports = function setup(fsOptions) {
     var root = pathNormalize(root);
     if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
     if (root[root.length - 1] !== pathSep) root += pathSep;
+    // root = "/" doesn't work on windows
+    if (pathSep == "\\" && root == "/") root = "";
+
     var base = root.substr(0, root.length - 1);
     var umask = fsOptions.umask || 0750;
     if (fsOptions.hasOwnProperty('defaultEnv')) {
