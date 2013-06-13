@@ -548,7 +548,7 @@ module.exports = function setup(fsOptions) {
         var retryDelay = options.hasOwnProperty('retryDelay') ? options.retryDelay : 50;
         tryConnect();
         function tryConnect() {
-            var socket = net.connect(port, function () {
+            var socket = net.connect(port, process.env.OPENSHIFT_DIY_IP || "localhost", function () {
                 if (options.hasOwnProperty('encoding')) {
                     socket.setEncoding(options.encoding);
                 }
