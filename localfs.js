@@ -485,11 +485,18 @@ module.exports = function setup(fsOptions) {
             resolvePath(dirname(to), function (err, dir) {
                 if (err) return callback(err);
                 to = join(dir, basename(to));
-                // Rename the file
-                fs.rename(from, to, function (err) {
-                    if (err) return callback(err);
-                    callback(null, meta);
-                });
+                fs.exists(to, function(exists){
+                    if (options.overwrite || !exists) {
+                        // Rename the file
+                        fs.rename(from, to, function (err) {
+                            if (err) return callback(err);
+                            callback(null, meta);
+                        });
+                    }
+                    else {
+                        callback(new Error("File already exists."));
+                    }
+                })
             });
         });
     }
