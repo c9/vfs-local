@@ -588,6 +588,11 @@ module.exports = function setup(fsOptions) {
         if (options.hasOwnProperty('stderrEncoding')) {
             child.stderr.setEncoding(options.stderrEncoding);
         }
+        
+        // node 0.10.x emits error events if the file does not exist
+        child.on("error", function(err) {
+          child.emit("exit", 127);
+        });
 
         callback(null, {
             process: child
