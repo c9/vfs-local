@@ -416,13 +416,22 @@ module.exports = function setup(fsOptions) {
             buffer.push(["end"]);
         }
         function error(err) {
+            resume();
+            if (err) callback(err);
+        }
+        
+        function resume() {
             if (readable) {
+                // Stop buffering events and playback anything that happened.
                 readable.removeListener("data", onData);
                 readable.removeListener("end", onEnd);
-                if (readable.destroy) readable.destroy();
-            }
-            if (err) 
-                return callback(err);
+
+                buffer.forEach(function (event) {
+                    readable.emit.apply(readable, event);
+                });
+                // Resume the input stream if possible
+                if (readable.resume) readable.resume();
+            }            
         }
 
         // Make sure the user has access to the directory and get the real path.
@@ -466,16 +475,7 @@ module.exports = function setup(fsOptions) {
                 callback();
             });
 
-            if (readable) {
-                // Stop buffering events and playback anything that happened.
-                readable.removeListener("data", onData);
-                readable.removeListener("end", onEnd);
-                buffer.forEach(function (event) {
-                    readable.emit.apply(readable, event);
-                });
-                // Resume the input stream if possible
-                if (readable.resume) readable.resume();
-            }
+            resume();
         }
     }
 
