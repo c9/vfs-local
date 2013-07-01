@@ -81,7 +81,11 @@ module.exports = function setup(fsOptions) {
     // Realpath a file and check for access
     // callback(err, path)
     function resolvePath(path, callback, alreadyRooted) {
-        if (!alreadyRooted) path = join(root, path);
+        if (path.substr(0, 2) == "~/")
+            path = process.env.HOME + path.substr(1);
+        else if (!alreadyRooted) 
+            path = join(root, path);
+
         if (fsOptions.checkSymlinks) fs.realpath(path, check);
         else check(null, path);
 
