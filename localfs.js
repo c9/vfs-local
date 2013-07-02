@@ -10,6 +10,8 @@ var Stream = require('stream').Stream;
 var getMime = require('simple-mime')("application/octet-stream");
 var vm = require('vm');
 
+var METAPATH = "/.c9/metadata";
+
 module.exports = function setup(fsOptions) {
     try {
         var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
@@ -53,6 +55,9 @@ module.exports = function setup(fsOptions) {
         rename: rename,
         copy: copy,
         symlink: symlink,
+
+        // Retrieve Metadata
+        metadata: metadata,
 
         // Wrapper around fs.watch or fs.watchFile
         watch: watch,
@@ -178,7 +183,11 @@ module.exports = function setup(fsOptions) {
             if (err) return callback(err);
             fn(path, function (err) {
                 if (err) return callback(err);
-                return callback(null, meta);
+                
+                // Remove metadata
+                fn(METAPATH + "/workspace" + path, function(){
+                    return callback(null, meta);
+                });
             });
         });
     }
@@ -204,6 +213,28 @@ module.exports = function setup(fsOptions) {
                     return callback(entry.err);
                 }
                 callback(null, entry);
+            });
+        });
+    }
+    
+    function metadata(path, data, callback) {
+        if (path.charAt(0) == "/")
+            path = "workspace" + path;
+            
+        var dirpath = METAPATH + "/" + dirname(path);
+        resolvePath(dirpath, function (err, dir) {
+            if (err) return callback(err);
+            
+            var file = basename(path);
+            path = join(dir, file);
+            
+            execFile("mkdir", { args: ["-p", dir] }, function(err){
+                if (err) return callback(err);
+                
+                fs.writeFile(path, JSON.stringify(data), {}, function(err){
+                    if (err) return callback(err);
+                    callback(null, {});
+                });
             });
         });
     }
@@ -385,7 +416,8 @@ module.exports = function setup(fsOptions) {
                 readable.removeListener("end", onEnd);
                 if (readable.destroy) readable.destroy();
             }
-            if (err) callback(err);
+            if (err) 
+                return callback(err);
         }
 
         // Make sure the user has access to the directory and get the real path.
@@ -494,7 +526,13 @@ module.exports = function setup(fsOptions) {
                         // Rename the file
                         fs.rename(from, to, function (err) {
                             if (err) return callback(err);
-                            callback(null, meta);
+                            
+                            // Rename metadata
+                            fs.rename(
+                              METAPATH + "/workspace" + from, 
+                              METAPATH + "/workspace" + to, function(){
+                                callback(null, meta);
+                            });
                         });
                     }
                     else {
