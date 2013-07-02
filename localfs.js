@@ -179,14 +179,18 @@ module.exports = function setup(fsOptions) {
     // Common logic used by rmdir and rmfile
     function remove(path, fn, callback) {
         var meta = {};
-        resolvePath(path, function (err, path) {
+        resolvePath(path, function (err, realpath) {
             if (err) return callback(err);
-            fn(path, function (err) {
+            fn(realpath, function (err) {
                 if (err) return callback(err);
                 
                 // Remove metadata
-                fn(METAPATH + "/workspace" + path, function(){
-                    return callback(null, meta);
+                resolvePath(METAPATH + "/workspace" + path, function (err, realpath) {
+                    if (err) return callback(null, meta);
+                    
+                    fn(realpath, function(){
+                        return callback(null, meta);
+                    });
                 });
             });
         });
@@ -515,24 +519,29 @@ module.exports = function setup(fsOptions) {
         }
         var meta = {};
         // Get real path to source
-        resolvePath(from, function (err, from) {
+        resolvePath(from, function (err, frompath) {
             if (err) return callback(err);
             // Get real path to target dir
             resolvePath(dirname(to), function (err, dir) {
                 if (err) return callback(err);
-                to = join(dir, basename(to));
-                fs.exists(to, function(exists){
+                var topath = join(dir, basename(to));
+                
+                fs.exists(topath, function(exists){
                     if (options.overwrite || !exists) {
                         // Rename the file
-                        fs.rename(from, to, function (err) {
+                        fs.rename(frompath, topath, function (err) {
                             if (err) return callback(err);
                             
                             // Rename metadata
-                            fs.rename(
-                              METAPATH + "/workspace" + from, 
-                              METAPATH + "/workspace" + to, function(){
-                                callback(null, meta);
-                            });
+                            if (options.metadata !== false) {
+                                rename(METAPATH + "/workspace" + from, {
+                                    to: METAPATH + "/workspace" + to,
+                                    metadata: false
+                                }, function(err){
+                                    console.log("HERE:", err);
+                                    callback(null, meta);
+                                });
+                            }
                         });
                     }
                     else {
