@@ -10,7 +10,6 @@ var Stream = require('stream').Stream;
 var getMime = require('simple-mime')("application/octet-stream");
 var vm = require('vm');
 
-var METAPATH = "/.c9/metadata";
 
 module.exports = function setup(fsOptions) {
     try {
@@ -21,6 +20,9 @@ module.exports = function setup(fsOptions) {
     }
     // Get the separator char. In Node 0.8, we can use path.sep instead
     var pathSep = pathNormalize("/");
+    
+    var METAPATH   = fsOptions.metapath;
+    var WSMETAPATH = fsOptions.wsmetapath;
 
     // Check and configure options
     var root = fsOptions.root;
@@ -185,7 +187,7 @@ module.exports = function setup(fsOptions) {
                 if (err) return callback(err);
                 
                 // Remove metadata
-                resolvePath(METAPATH + "/workspace" + path, function (err, realpath) {
+                resolvePath(WSMETAPATH + path, function (err, realpath) {
                     if (err) return callback(null, meta);
                     
                     fn(realpath, function(){
@@ -222,10 +224,9 @@ module.exports = function setup(fsOptions) {
     }
     
     function metadata(path, data, callback) {
-        if (path.charAt(0) == "/")
-            path = "workspace" + path;
-            
-        var dirpath = METAPATH + "/" + dirname(path);
+        var dirpath = (path.charAt(0) == "/" 
+            ? WSMETAPATH
+            : METAPATH) + "/" + dirname(path);
         resolvePath(dirpath, function (err, dir) {
             if (err) return callback(err);
             
@@ -534,8 +535,8 @@ module.exports = function setup(fsOptions) {
                             
                             // Rename metadata
                             if (options.metadata !== false) {
-                                rename(METAPATH + "/workspace" + from, {
-                                    to: METAPATH + "/workspace" + to,
+                                rename(WSMETAPATH + from, {
+                                    to: WSMETAPATH + to,
                                     metadata: false
                                 }, function(err){
                                     console.log("HERE:", err);
