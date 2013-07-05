@@ -224,9 +224,9 @@ module.exports = function setup(fsOptions) {
     }
     
     function metadata(path, data, callback) {
-        var dirpath = (path.charAt(0) == "/" 
-            ? WSMETAPATH
-            : METAPATH) + "/" + dirname(path);
+        var dirpath = (path.substr(0,5) == "/_/_/" 
+            ? METAPATH + dirname(path.substr(4))
+            : WSMETAPATH + "/" + dirname(path));
         resolvePath(dirpath, function (err, dir) {
             if (err) return callback(err);
             
