@@ -9,7 +9,7 @@ var basename = require('path').basename;
 var Stream = require('stream').Stream;
 var getMime = require('simple-mime')("application/octet-stream");
 var vm = require('vm');
-
+var crypto = require("crypto");
 
 module.exports = function setup(fsOptions) {
     try {
@@ -30,6 +30,9 @@ module.exports = function setup(fsOptions) {
     var root = pathNormalize(root);
     if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
     if (root[root.length - 1] !== pathSep) root += pathSep;
+    // root = "/" doesn't work on windows
+    if (pathSep == "\\" && root == "/") root = "";
+
     var base = root.substr(0, root.length - 1);
     var umask = fsOptions.umask || 0750;
     if (fsOptions.hasOwnProperty('defaultEnv')) {
@@ -416,13 +419,22 @@ module.exports = function setup(fsOptions) {
             buffer.push(["end"]);
         }
         function error(err) {
+            resume();
+            if (err) return callback(err);
+        }
+        
+        function resume() {
             if (readable) {
+                // Stop buffering events and playback anything that happened.
                 readable.removeListener("data", onData);
                 readable.removeListener("end", onEnd);
-                if (readable.destroy) readable.destroy();
-            }
-            if (err) 
-                return callback(err);
+
+                buffer.forEach(function (event) {
+                    readable.emit.apply(readable, event);
+                });
+                // Resume the input stream if possible
+                if (readable.resume) readable.resume();
+            }            
         }
 
         // Make sure the user has access to the directory and get the real path.
@@ -441,6 +453,13 @@ module.exports = function setup(fsOptions) {
             }
             onPath(resolvedPath);
         });
+
+        var tempPath;
+
+        function createTempFile(resolvedPath) {
+            tempPath = tmpFile("vfs-");
+        }
+
 
         function onPath(path) {
             var hadError;
@@ -466,16 +485,7 @@ module.exports = function setup(fsOptions) {
                 callback();
             });
 
-            if (readable) {
-                // Stop buffering events and playback anything that happened.
-                readable.removeListener("data", onData);
-                readable.removeListener("end", onEnd);
-                buffer.forEach(function (event) {
-                    readable.emit.apply(readable, event);
-                });
-                // Resume the input stream if possible
-                if (readable.resume) readable.resume();
-            }
+            resume();
         }
     }
 
@@ -677,7 +687,7 @@ module.exports = function setup(fsOptions) {
         var retryDelay = options.hasOwnProperty('retryDelay') ? options.retryDelay : 50;
         tryConnect();
         function tryConnect() {
-            var socket = net.connect(port, function () {
+            var socket = net.connect(port, process.env.OPENSHIFT_DIY_IP || "localhost", function () {
                 if (options.hasOwnProperty('encoding')) {
                     socket.setEncoding(options.encoding);
                 }
@@ -717,6 +727,11 @@ module.exports = function setup(fsOptions) {
         if (options.hasOwnProperty('stderrEncoding')) {
             child.stderr.setEncoding(options.stderrEncoding);
         }
+        
+        // node 0.10.x emits error events if the file does not exist
+        child.on("error", function(err) {
+          child.emit("exit", 127);
+        });
 
         callback(null, {
             process: child
@@ -931,4 +946,23 @@ function evaluate(code) {
 // Calculate a proper etag from a nodefs stat object
 function calcEtag(stat) {
   return (stat.isFile() ? '': 'W/') + '"' + (stat.ino || 0).toString(36) + "-" + stat.size.toString(36) + "-" + stat.mtime.valueOf().toString(36) + '"';
+}
+
+function tmpDir() {
+    return process.env.TMPDIR ||
+        process.env.TMP ||
+        process.env.TEMP ||
+        "/tmp";
+}
+
+function uid(length) {
+    return (crypto
+        .randomBytes(length)
+        .toString("base64")
+        .slice(0, length)
+    );
+}
+
+function tmpFile(prefix, suffix) {
+    return join(tmpDir(), [prefix || "", uid(32), suffix || ""].join());
 }
