@@ -755,6 +755,8 @@ module.exports = function setup(fsOptions) {
             env[prop] = options.env[prop];
         }
         options.env = env;
+        if (options.cwd && options.cwd.charAt(0) == "~")
+            options.cwd = env.HOME + options.cwd.substr(1);
 
         try {
             var proc = pty.spawn(executablePath, args, options);
