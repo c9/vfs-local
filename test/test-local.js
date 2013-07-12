@@ -587,7 +587,7 @@ describe('vfs-local', function () {
 
   describe('vfs.spawn()', function () {
     it("should spawn a child process", function (done) {
-      var args = ["-e", "process.stdin.pipe(process.stdout);try{process.stdin.resume()}catch(e){};"];
+      var args = ["-e", "process.stdin.pipe(process.stdout);process.stdin.resume();"];
       vfs.spawn(process.execPath, {args: args, stdoutEncoding: "utf8"}, function (err, meta) {
         if (err) throw err;
         expect(meta).property("process").ok;
