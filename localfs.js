@@ -31,6 +31,9 @@ module.exports = function setup(fsOptions) {
     if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
     if (root[root.length - 1] !== pathSep) root += pathSep;
     var base = root.substr(0, root.length - 1);
+    // root = "/" doesn't work on windows
+    if (pathSep == "\\" && root == "/") root = "";
+
     var umask = fsOptions.umask || 0750;
     if (fsOptions.hasOwnProperty('defaultEnv')) {
         fsOptions.defaultEnv.__proto__ = process.env;
@@ -683,7 +686,7 @@ module.exports = function setup(fsOptions) {
         var retryDelay = options.hasOwnProperty('retryDelay') ? options.retryDelay : 50;
         tryConnect();
         function tryConnect() {
-            var socket = net.connect(port, function () {
+            var socket = net.connect(port, process.env.OPENSHIFT_DIY_IP || "localhost", function () {
                 if (options.hasOwnProperty('encoding')) {
                     socket.setEncoding(options.encoding);
                 }
@@ -723,6 +726,11 @@ module.exports = function setup(fsOptions) {
         if (options.hasOwnProperty('stderrEncoding')) {
             child.stderr.setEncoding(options.stderrEncoding);
         }
+        
+        // node 0.10.x emits error events if the file does not exist
+        child.on("error", function(err) {
+          child.emit("exit", 127);
+        });
 
         callback(null, {
             process: child
