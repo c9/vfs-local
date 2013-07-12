@@ -9,11 +9,20 @@ var basename = require('path').basename;
 var Stream = require('stream').Stream;
 var getMime = require('simple-mime')("application/octet-stream");
 var vm = require('vm');
+var crypto = require("crypto");
 
 module.exports = function setup(fsOptions) {
-
+    try {
+        var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
+    } catch(e) {
+        console.warn("unable to initialize pty.js", e);
+        pty = function(){};
+    }
     // Get the separator char. In Node 0.8, we can use path.sep instead
     var pathSep = pathNormalize("/");
+    
+    var METAPATH   = fsOptions.metapath;
+    var WSMETAPATH = fsOptions.wsmetapath;
 
     // Check and configure options
     var root = fsOptions.root;
@@ -21,9 +30,6 @@ module.exports = function setup(fsOptions) {
     var root = pathNormalize(root);
     if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
     if (root[root.length - 1] !== pathSep) root += pathSep;
-    // root = "/" doesn't work on windows
-    if (pathSep == "\\" && root == "/") root = "";
-
     var base = root.substr(0, root.length - 1);
     var umask = fsOptions.umask || 0750;
     if (fsOptions.hasOwnProperty('defaultEnv')) {
@@ -52,6 +58,9 @@ module.exports = function setup(fsOptions) {
         copy: copy,
         symlink: symlink,
 
+        // Retrieve Metadata
+        metadata: metadata,
+
         // Wrapper around fs.watch or fs.watchFile
         watch: watch,
 
@@ -60,6 +69,7 @@ module.exports = function setup(fsOptions) {
 
         // Process Management
         spawn: spawn,
+        pty: ptyspawn,
         execFile: execFile,
 
         // Basic async event emitter style API
@@ -78,7 +88,11 @@ module.exports = function setup(fsOptions) {
     // Realpath a file and check for access
     // callback(err, path)
     function resolvePath(path, callback, alreadyRooted) {
-        if (!alreadyRooted) path = join(root, path);
+        if (path.substr(0, 2) == "~/")
+            path = process.env.HOME + path.substr(1);
+        else if (!alreadyRooted) 
+            path = join(root, path);
+
         if (fsOptions.checkSymlinks) fs.realpath(path, check);
         else check(null, path);
 
@@ -167,11 +181,19 @@ module.exports = function setup(fsOptions) {
     // Common logic used by rmdir and rmfile
     function remove(path, fn, callback) {
         var meta = {};
-        resolvePath(path, function (err, path) {
+        resolvePath(path, function (err, realpath) {
             if (err) return callback(err);
-            fn(path, function (err) {
+            fn(realpath, function (err) {
                 if (err) return callback(err);
-                return callback(null, meta);
+                
+                // Remove metadata
+                resolvePath(WSMETAPATH + path, function (err, realpath) {
+                    if (err) return callback(null, meta);
+                    
+                    fn(realpath, function(){
+                        return callback(null, meta);
+                    });
+                });
             });
         });
     }
@@ -197,6 +219,27 @@ module.exports = function setup(fsOptions) {
                     return callback(entry.err);
                 }
                 callback(null, entry);
+            });
+        });
+    }
+    
+    function metadata(path, data, callback) {
+        var dirpath = (path.substr(0,5) == "/_/_/" 
+            ? METAPATH + dirname(path.substr(4))
+            : WSMETAPATH + "/" + dirname(path));
+        resolvePath(dirpath, function (err, dir) {
+            if (err) return callback(err);
+            
+            var file = basename(path);
+            path = join(dir, file);
+            
+            execFile("mkdir", { args: ["-p", dir] }, function(err){
+                if (err) return callback(err);
+                
+                fs.writeFile(path, JSON.stringify(data), {}, function(err){
+                    if (err) return callback(err);
+                    callback(null, {});
+                });
             });
         });
     }
@@ -373,12 +416,22 @@ module.exports = function setup(fsOptions) {
             buffer.push(["end"]);
         }
         function error(err) {
+            resume();
+            if (err) return callback(err);
+        }
+        
+        function resume() {
             if (readable) {
+                // Stop buffering events and playback anything that happened.
                 readable.removeListener("data", onData);
                 readable.removeListener("end", onEnd);
-                if (readable.destroy) readable.destroy();
-            }
-            if (err) callback(err);
+
+                buffer.forEach(function (event) {
+                    readable.emit.apply(readable, event);
+                });
+                // Resume the input stream if possible
+                if (readable.resume) readable.resume();
+            }            
         }
 
         // Make sure the user has access to the directory and get the real path.
@@ -397,6 +450,13 @@ module.exports = function setup(fsOptions) {
             }
             onPath(resolvedPath);
         });
+
+        var tempPath;
+
+        function createTempFile(resolvedPath) {
+            tempPath = tmpFile("vfs-");
+        }
+
 
         function onPath(path) {
             var hadError;
@@ -422,16 +482,7 @@ module.exports = function setup(fsOptions) {
                 callback();
             });
 
-            if (readable) {
-                // Stop buffering events and playback anything that happened.
-                readable.removeListener("data", onData);
-                readable.removeListener("end", onEnd);
-                buffer.forEach(function (event) {
-                    readable.emit.apply(readable, event);
-                });
-                // Resume the input stream if possible
-                if (readable.resume) readable.resume();
-            }
+            resume();
         }
     }
 
@@ -476,17 +527,37 @@ module.exports = function setup(fsOptions) {
         }
         var meta = {};
         // Get real path to source
-        resolvePath(from, function (err, from) {
+        resolvePath(from, function (err, frompath) {
             if (err) return callback(err);
             // Get real path to target dir
             resolvePath(dirname(to), function (err, dir) {
                 if (err) return callback(err);
-                to = join(dir, basename(to));
-                // Rename the file
-                fs.rename(from, to, function (err) {
-                    if (err) return callback(err);
-                    callback(null, meta);
-                });
+                var topath = join(dir, basename(to));
+                
+                fs.exists(topath, function(exists){
+                    if (options.overwrite || !exists) {
+                        // Rename the file
+                        fs.rename(frompath, topath, function (err) {
+                            if (err) return callback(err);
+                            
+                            // Rename metadata
+                            if (options.metadata !== false) {
+                                rename(WSMETAPATH + from, {
+                                    to: WSMETAPATH + to,
+                                    metadata: false
+                                }, function(err){
+                                    console.log("HERE:", err);
+                                    callback(null, meta);
+                                });
+                            }
+                        });
+                    }
+                    else {
+                        var err = new Error("File already exists.")
+                        err.code = "EEXIST";
+                        callback(err);
+                    }
+                })
             });
         });
     }
@@ -502,10 +573,72 @@ module.exports = function setup(fsOptions) {
         else {
             return callback(new Error("Must specify either options.from or options.to"));
         }
-        readfile(from, {}, function (err, meta) {
-            if (err) return callback(err);
-            mkfile(to, {stream: meta.stream}, callback);
-        });
+        
+        if (!options.overwrite) {
+            resolvePath(to, function(err, path){
+                if (err) return callback(err);
+                
+                fs.stat(path, function(err, stat){
+                    if (!err && stat && !stat.err) {
+                        var path = to.replace(/(?:\.([\d+]))?(\.[^\.]*)?$/, function(m, d, e){
+                            return "." + (parseInt(d, 10)+1 || 1) + (e ? e : "");
+                        });
+                        
+                        copy(from, {
+                            to        : path, 
+                            overwrite : false, 
+                            recursive : options.recursive
+                        }, callback);
+                    }
+                    else {
+                        innerCopy(from, to);
+                    }
+                });
+            });
+        }
+        else {
+            innerCopy(from, to);
+        }
+        
+        function innerCopy(from, to) {
+            if (options.recursive) {
+                resolvePath(from, function(err, rFrom){
+                    resolvePath(to, function(err, rTo){
+                        spawn("cp", {
+                            args: [ "-a", rFrom, rTo ],
+                            stdoutEncoding : "utf8",
+                            stderrEncoding : "utf8",
+                            stdinEncoding : "utf8"
+                        }, function(err, child){
+                            if (err) return callback(err);
+                            
+                            var proc = child.process;
+                            proc.stderr.on("data", function(d){
+                                if (d)
+                                    callback(new Error(d));
+                            });
+                            proc.stdout.on("end", function() {
+                                callback(null, {
+                                    to: to,
+                                    meta: null
+                                });
+                            });
+                        });
+                    });
+                });
+            }
+            else {
+                readfile(from, {}, function (err, meta) {
+                    if (err) return callback(err);
+                    mkfile(to, {stream: meta.stream}, function (err, meta) {
+                        callback(err, {
+                            to: to,
+                            meta: meta
+                        })
+                    });
+                });
+            }
+        }
     }
 
     function symlink(path, options, callback) {
@@ -515,9 +648,12 @@ module.exports = function setup(fsOptions) {
         resolvePath(dirname(path), function (err, dir) {
             if (err) return callback(err);
             path = join(dir, basename(path));
-            fs.symlink(options.target, path, function (err) {
-                if (err) return callback(err);
-                callback(null, meta);
+            
+            resolvePath(options.target, function (err, target) {
+                fs.symlink(target, path, function (err) {
+                    if (err) return callback(err);
+                    callback(null, meta);
+                });
             });
         });
     }
@@ -548,7 +684,7 @@ module.exports = function setup(fsOptions) {
         var retryDelay = options.hasOwnProperty('retryDelay') ? options.retryDelay : 50;
         tryConnect();
         function tryConnect() {
-            var socket = net.connect(port, process.env.OPENSHIFT_DIY_IP || "localhost", function () {
+            var socket = net.connect(port, function () {
                 if (options.hasOwnProperty('encoding')) {
                     socket.setEncoding(options.encoding);
                 }
@@ -574,7 +710,7 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
-
+        
         var child;
         try {
             child = childProcess.spawn(executablePath, args, options);
@@ -588,14 +724,45 @@ module.exports = function setup(fsOptions) {
         if (options.hasOwnProperty('stderrEncoding')) {
             child.stderr.setEncoding(options.stderrEncoding);
         }
-        
-        // node 0.10.x emits error events if the file does not exist
-        child.on("error", function(err) {
-          child.emit("exit", 127);
-        });
 
         callback(null, {
             process: child
+        });
+    }
+    
+    function ptyspawn(executablePath, options, callback) {
+        var args = options.args || [];
+        delete options.args;
+        
+        if (options.hasOwnProperty('env')) {
+            options.env.__proto__ = fsOptions.defaultEnv;
+        } else {
+            options.env = fsOptions.defaultEnv;
+        }
+        
+        // Pty is only reading from the object itself;
+        var env = {};
+        for (var prop in options.env) {
+            if (prop == "TMUX") continue;
+            env[prop] = options.env[prop];
+        }
+        options.env = env;
+        if (options.cwd && options.cwd.charAt(0) == "~")
+            options.cwd = env.HOME + options.cwd.substr(1);
+
+        try {
+            var proc = pty.spawn(executablePath, args, options);
+            proc.on("error", function(){
+                // Prevent PTY from throwing an error;
+                // I don't know how to test and the src is funky because
+                // it tests for .length < 2. Who is setting the other event?
+            });
+        } catch (err) {
+            return callback(err);
+        }
+        
+        callback(null, {
+            pty: proc
         });
     }
 
@@ -606,7 +773,7 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
-
+        
         childProcess.execFile(executablePath, options.args || [], options, function (err, stdout, stderr) {
             if (err) {
                 err.stderr = stderr;
@@ -773,4 +940,23 @@ function evaluate(code) {
 // Calculate a proper etag from a nodefs stat object
 function calcEtag(stat) {
   return (stat.isFile() ? '': 'W/') + '"' + (stat.ino || 0).toString(36) + "-" + stat.size.toString(36) + "-" + stat.mtime.valueOf().toString(36) + '"';
+}
+
+function tmpDir() {
+    return process.env.TMPDIR ||
+        process.env.TMP ||
+        process.env.TEMP ||
+        "/tmp";
+}
+
+function uid(length) {
+    return (crypto
+        .randomBytes(length)
+        .toString("base64")
+        .slice(0, length)
+    );
+}
+
+function tmpFile(prefix, suffix) {
+    return join(tmpDir(), [prefix || "", uid(32), suffix || ""].join());
 }
