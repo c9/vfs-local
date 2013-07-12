@@ -546,7 +546,6 @@ module.exports = function setup(fsOptions) {
                                     to: WSMETAPATH + to,
                                     metadata: false
                                 }, function(err){
-                                    console.log("HERE:", err);
                                     callback(null, meta);
                                 });
                             }
