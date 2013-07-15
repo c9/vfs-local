@@ -1,15 +1,16 @@
-var fs = require('fs');
-var net = require('net');
-var childProcess = require('child_process');
-var constants = require('constants');
-var join = require('path').join;
-var pathResolve = require('path').resolve;
-var pathNormalize = require('path').normalize;
-var dirname = require('path').dirname;
-var basename = require('path').basename;
-var Stream = require('stream').Stream;
-var getMime = require('simple-mime')("application/octet-stream");
-var vm = require('vm');
+var fs = require("fs");
+var net = require("net");
+var childProcess = require("child_process");
+var constants = require("constants");
+var join = require("path").join;
+var pathResolve = require("path").resolve;
+var pathNormalize = require("path").normalize;
+var dirname = require("path").dirname;
+var basename = require("path").basename;
+var Stream = require("stream").Stream;
+var getMime = require("simple-mime")("application/octet-stream");
+var vm = require("vm");
+var exists = fs.exists || require("path").exists;
 var crypto = require("crypto");
 
 module.exports = function setup(fsOptions) {
@@ -28,7 +29,8 @@ module.exports = function setup(fsOptions) {
     // Check and configure options
     var root = fsOptions.root;
     if (!root) throw new Error("root is a required option");
-    var root = pathNormalize(root);
+    root = pathNormalize(root);
+    
     if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
     if (root[root.length - 1] !== pathSep) root += pathSep;
     var base = root.substr(0, root.length - 1);
@@ -256,7 +258,7 @@ module.exports = function setup(fsOptions) {
             if (err) return callback(err);
             if (stat.isDirectory()) {
                 fs.close(fd);
-                var err = new Error("EISDIR: Requested resource is a directory");
+                err = new Error("EISDIR: Requested resource is a directory");
                 err.code = "EISDIR";
                 return callback(err);
             }
@@ -585,7 +587,7 @@ module.exports = function setup(fsOptions) {
                 if (err) return callback(err);
                 var topath = join(dir, basename(to));
                 
-                fs.exists(topath, function(exists){
+                exists(topath, function(exists){
                     if (options.overwrite || !exists) {
                         // Rename the file
                         fs.rename(frompath, topath, function (err) {
@@ -603,11 +605,11 @@ module.exports = function setup(fsOptions) {
                         });
                     }
                     else {
-                        var err = new Error("File already exists.")
+                        var err = new Error("File already exists.");
                         err.code = "EEXIST";
                         callback(err);
                     }
-                })
+                });
             });
         });
     }
@@ -689,7 +691,7 @@ module.exports = function setup(fsOptions) {
                         callback(err, {
                             to: to,
                             meta: meta
-                        })
+                        });
                     });
                 });
             }
