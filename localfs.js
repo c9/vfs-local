@@ -1,6 +1,7 @@
 var fs = require('fs');
 var net = require('net');
 var childProcess = require('child_process');
+var constants = require('constants');
 var join = require('path').join;
 var pathResolve = require('path').resolve;
 var pathNormalize = require('path').normalize;
@@ -382,7 +383,10 @@ module.exports = function setup(fsOptions) {
             });
         });
     }
-
+    
+    // This is used for creating / overwriting files.  It always creates a new tmp
+    // file and then renames to the final destination.
+    // It will copy the properties of the existing file is there is one.
     function mkfile(path, options, realCallback) {
         var meta = {};
         var called;
@@ -420,7 +424,11 @@ module.exports = function setup(fsOptions) {
         }
         function error(err) {
             resume();
-            if (err) return callback(err);
+            if (tempPath) {
+                fs.unlink(tempPath, callback.bind(null, err));
+            }
+            else
+                return callback(err);
         }
         
         function resume() {
@@ -436,9 +444,12 @@ module.exports = function setup(fsOptions) {
                 if (readable.resume) readable.resume();
             }            
         }
+        
+        var tempPath;
+        var resolvedPath = "";
 
         // Make sure the user has access to the directory and get the real path.
-        resolvePath(path, function (err, resolvedPath) {
+        resolvePath(path, function (err, _resolvedPath) {
             if (err) {
                 if (err.code !== "ENOENT") {
                     return error(err);
@@ -447,25 +458,55 @@ module.exports = function setup(fsOptions) {
                 // In that case, just resolve the parent path and go from there.
                 resolvePath(dirname(path), function (err, dir) {
                     if (err) return error(err);
-                    onPath(join(dir, basename(path)));
+                    resolvedPath = join(dir, basename(path));
+                    createTempFile();
                 });
                 return;
             }
-            onPath(resolvedPath);
+            
+            resolvedPath = _resolvedPath;
+            createTempFile();
         });
 
-        var tempPath;
 
-        function createTempFile(resolvedPath) {
-            tempPath = tmpFile("vfs-");
+        function createTempFile() {
+            tempPath = tmpFile(dirname(resolvedPath), "." + basename(resolvedPath) + "-", "~");
+
+            var mode = options.mode || umask & 0666;
+            fs.stat(resolvedPath, function(err, stat) {
+                if (err && err.code !== "ENOENT") return error(err);
+                
+                var uid = process.getuid();
+                var gid = process.getgid();
+                
+                if (stat) {
+                    mode = stat.mode & 0777;
+                    uid = stat.uid;
+                    gid = stat.gid;
+                }
+          
+                // node 0.8.x adds a "wx" shortcut, but since it's not in 0.6.x we use the
+                // longhand here.
+                var flags = constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
+                fs.open(tempPath, flags, mode, function (err, fd) {
+                    if (err) return error(err);
+                    
+                    fs.fchown(fd, uid, gid, function(err) {
+                        fs.close(fd);
+                        if (err) return error(err);
+                        
+                        pipe(fs.WriteStream(tempPath, {
+                            encoding: options.encoding || null,
+                            mode: mode
+                        }));                        
+                    });
+                });
+            });
         }
 
-
-        function onPath(path) {
+        function pipe(writable) {
             var hadError;
             
-            if (!options.mode) options.mode = umask & 0666;
-            var writable = new fs.WriteStream(path, options);
             if (readable) {
                 readable.pipe(writable);
             }
@@ -482,10 +523,17 @@ module.exports = function setup(fsOptions) {
             });
             writable.on('close', function () {
                 if (hadError) return;
-                callback();
+                swap(path);
             });
 
             resume();
+        }
+        
+        function swap() {
+            fs.rename(tempPath, resolvedPath, function (err) {
+                if (err) return error(err);
+                callback();
+            });
         }
     }
 
@@ -578,10 +626,15 @@ module.exports = function setup(fsOptions) {
         
         if (!options.overwrite) {
             resolvePath(to, function(err, path){
-                if (err) return callback(err);
+                if (err.code == "ENOENT")
+                    return innerCopy(from, to);
+                    
+                if (err) 
+                    return callback(err);
                 
                 fs.stat(path, function(err, stat){
                     if (!err && stat && !stat.err) {
+                        // TODO: this logic should be pushed into the application code
                         var path = to.replace(/(?:\.([\d+]))?(\.[^\.]*)?$/, function(m, d, e){
                             return "." + (parseInt(d, 10)+1 || 1) + (e ? e : "");
                         });
@@ -652,6 +705,7 @@ module.exports = function setup(fsOptions) {
             path = join(dir, basename(path));
             
             resolvePath(options.target, function (err, target) {
+                if (err) return callback(err);
                 fs.symlink(target, path, function (err) {
                     if (err) return callback(err);
                     callback(null, meta);
@@ -757,8 +811,9 @@ module.exports = function setup(fsOptions) {
         if (options.cwd && options.cwd.charAt(0) == "~")
             options.cwd = env.HOME + options.cwd.substr(1);
 
+        var proc;
         try {
-            var proc = pty.spawn(executablePath, args, options);
+            proc = pty.spawn(executablePath, args, options);
             proc.on("error", function(){
                 // Prevent PTY from throwing an error;
                 // I don't know how to test and the src is funky because
@@ -961,9 +1016,10 @@ function uid(length) {
         .randomBytes(length)
         .toString("base64")
         .slice(0, length)
+        .replace(/[+\/]+/g, "")
     );
 }
 
-function tmpFile(prefix, suffix) {
-    return join(tmpDir(), [prefix || "", uid(32), suffix || ""].join());
+function tmpFile(baseDir, prefix, suffix) {
+    return join(baseDir, [prefix || "", uid(16), suffix || ""].join(""));
 }

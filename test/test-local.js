@@ -311,6 +311,16 @@ describe('vfs-local', function () {
         });
       });
     });
+    it("should not write to a read only file", function(done) {
+      var vpath = "/readonly.txt";
+      fs.writeFileSync(base + vpath, "read only");
+      fs.chmodSync(base + vpath, "0444");
+      vfs.mkfile(vpath, {}, function(err, meta) {
+        expect(err).property("code").equal("EACCES");
+        fs.unlinkSync(base + vpath);
+        done();
+      });
+    });
   });
 
   describe('vfs.mkdir()', function () {
@@ -498,8 +508,17 @@ describe('vfs-local', function () {
         done();
       });
     });
-    it("should error with EEXIST if the file already exists", function (done) {
+    it("should error with ENOENT if the dire3ctory of the target file does not exists", function (done) {
       vfs.symlink("/file.txt", {target:"/this/is/crazy"}, function (err, meta) {
+        expect(err).property("code").equal("ENOENT");
+        done();
+      });
+    });
+    it("should error with EEXIST if the file already exists", function (done) {
+      var target = "/target.txt";
+      fs.writeFileSync(root + target, "Target");
+      vfs.symlink("/file.txt", {target: target}, function (err, meta) {
+        fs.unlinkSync(base + target);
         expect(err).property("code").equal("EEXIST");
         done();
       });
