@@ -76,6 +76,7 @@ Create or overwrite a file.  This has two modes. In one mode, the caller provide
 Options can include:
 
  - `stream`: A readable streaem to be written to the filesystem.
+ - `parents`: make parent directories as needed
  - Any other options are passed through to node's `fs.createWriteStream`.
 
 Meta may include:
@@ -85,6 +86,11 @@ Meta may include:
 ## vfs.mkdir(path, options, callback)
 
 Create a directory at `path`.  Will error with `EEXIST` if something is already at the path.
+
+Options can include:
+
+ - `parents`: make parent directories as needed
+
 
 ## vfs.rmfile(path, options, callback)
 

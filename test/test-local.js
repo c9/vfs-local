@@ -321,6 +321,20 @@ describe('vfs-local', function () {
         done();
       });
     });
+    it("should create intermediate directories", function(done) {
+      vfs.execFile("rm", {args: ["-rf", root + "/nested"]}, function() {
+        vfs.mkfile("/nested/dir/file.txt", { parents: true }, function(err, meta) {
+          meta.stream.write("juhu");
+          meta.stream.end();
+          
+          meta.stream.on("saved", function() {
+            var contents = fs.readFileSync(root + "nested/dir/file.txt", "utf8");
+            expect(contents).equal("juhu");
+            vfs.execFile("rm", {args: ["-rf", root + "/nested"]}, done);
+          });
+        });
+      });
+    });
   });
 
   describe('vfs.mkdir()', function () {

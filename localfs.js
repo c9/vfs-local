@@ -93,13 +93,24 @@ module.exports = function setup(fsOptions) {
 
     // Realpath a file and check for access
     // callback(err, path)
-    function resolvePath(path, callback, alreadyRooted) {
+    function resolvePath(path, options, callback) {
+        if (!callback) {
+            callback = options;
+            options = {};
+        }
+        
+        var alreadyRooted = options.alreadyRooted;
+        var checkSymlinks = options.checkSymlinks === undefined ? true : options.checkSymlinks;
+        
+        
+        if (checkSymlinks === undefined)
+            checkSymlinks = true;
         if (path.substr(0, 2) == "~/")
             path = process.env.HOME + path.substr(1);
         else if (!alreadyRooted) 
             path = join(root, path);
 
-        if (fsOptions.checkSymlinks) fs.realpath(path, check);
+        if (checkSymlinks && fsOptions.checkSymlinks) fs.realpath(path, check);
         else check(null, path);
 
         function check(err, path) {
@@ -168,7 +179,7 @@ module.exports = function setup(fsOptions) {
                         return callback(entry);
                     }
                     entry.link = link;
-                    resolvePath(pathResolve(dirname(fullpath), link), function (err, newpath) {
+                    resolvePath(pathResolve(dirname(fullpath), link), {alreadyRooted: true}, function (err, newpath) {
                       if (err) {
                           entry.linkStatErr = err;
                           return callback(entry);
@@ -178,7 +189,7 @@ module.exports = function setup(fsOptions) {
                           linkStat.fullPath = newpath.substr(base.length) || "/";
                           return callback(entry);
                       });
-                    }, true/*alreadyRooted*/);
+                    });
                 });
             }
         });
@@ -207,10 +218,10 @@ module.exports = function setup(fsOptions) {
 ////////////////////////////////////////////////////////////////////////////////
 
     function resolve(path, options, callback) {
-        resolvePath(path, function (err, path) {
+        resolvePath(path, options, function (err, path) {
             if (err) return callback(err);
             callback(null, { path: path });
-        }, options.alreadyRooted);
+        });
     }
 
     function stat(path, options, callback) {
@@ -450,27 +461,43 @@ module.exports = function setup(fsOptions) {
         var tempPath;
         var resolvedPath = "";
 
-        // Make sure the user has access to the directory and get the real path.
-        resolvePath(path, function (err, _resolvedPath) {
-            if (err) {
-                if (err.code !== "ENOENT") {
-                    return error(err);
-                }
-                // If checkSymlinks is on we'll get an ENOENT when creating a new file.
-                // In that case, just resolve the parent path and go from there.
-                resolvePath(dirname(path), function (err, dir) {
+        mkdir();
+
+        function mkdir() {
+            if (options.parents) {
+                mkdirP(dirname(path), {}, function(err) {
                     if (err) return error(err);
-                    resolvedPath = join(dir, basename(path));
-                    createTempFile();
+                    resolve();
                 });
-                return;
             }
-            
-            resolvedPath = _resolvedPath;
-            createTempFile();
-        });
+            else {
+                resolve();
+            }
+        }
 
-
+        // Make sure the user has access to the directory and get the real path.
+        function resolve() {
+            resolvePath(path, function (err, _resolvedPath) {
+                if (err) {
+                    if (err.code !== "ENOENT") {
+                        return error(err);
+                    }
+                    // If checkSymlinks is on we'll get an ENOENT when creating a new file.
+                    // In that case, just resolve the parent path and go from there.
+                    resolvePath(dirname(path), function (err, dir) {
+                        if (err) return error(err);
+                        resolvedPath = join(dir, basename(path));
+                        createTempFile();
+                    });
+                    return;
+                }
+                
+                resolvedPath = _resolvedPath;
+                createTempFile();
+            });
+        }
+        
+        
         function createTempFile() {
             tempPath = tmpFile(dirname(resolvedPath), "." + basename(resolvedPath) + "-", "~");
 
@@ -539,8 +566,26 @@ module.exports = function setup(fsOptions) {
         }
     }
 
+    function mkdirP(path, options, callback) {
+        resolvePath(path, { checkSymlinks: false}, function(err, dir) {
+            exists(dir, function(exists) {
+                if (exists) return callback(null, {}); 
+                execFile("mkdir", { args: ["-p", dir] }, function(err) {
+                    if (err && err.message.indexOf("exists") > -1)
+                        callback({"code": "EEXIST", "message": err.message});
+                    else
+                        callback(null, {});
+                });
+            });
+        });
+    }
+
     function mkdir(path, options, callback) {
         var meta = {};
+        
+        if (options.parents)
+            return mkdirP(path, options, callback);
+            
         // Make sure the user has access to the parent directory and get the real path.
         resolvePath(dirname(path), function (err, dir) {
             if (err) return callback(err);
