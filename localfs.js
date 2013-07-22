@@ -499,7 +499,7 @@ module.exports = function setup(fsOptions) {
         
         
         function createTempFile() {
-            tempPath = tmpFile(dirname(resolvedPath), "." + basename(resolvedPath) + "-", "~");
+            tempPath = tmpFile(tmpDir(), "." + basename(resolvedPath) + "-", "~");
 
             var mode = options.mode || umask & 0666;
             fs.stat(resolvedPath, function(err, stat) {
@@ -513,23 +513,45 @@ module.exports = function setup(fsOptions) {
                     uid = stat.uid;
                     gid = stat.gid;
                 }
-          
-                // node 0.8.x adds a "wx" shortcut, but since it's not in 0.6.x we use the
-                // longhand here.
-                var flags = constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
-                fs.open(tempPath, flags, mode, function (err, fd) {
-                    if (err) return error(err);
-                    
-                    fs.fchown(fd, uid, gid, function(err) {
-                        fs.close(fd);
+
+                if (!stat) {
+                    // check if we can create a writable file
+                    fs.open(resolvedPath, constants.O_CREAT | constants.O_APPEND, function(err, fd) {
                         if (err) return error(err);
                         
-                        pipe(fs.WriteStream(tempPath, {
-                            encoding: options.encoding || null,
-                            mode: mode
-                        }));                        
+                        fs.close(fd, function(err) {
+                            if (err) return error(err);
+                            
+                            fs.unlink(resolvedPath, function(err) {
+                                if (err) return error(err);
+                                
+                                create();
+                            });
+                        });
                     });
-                });
+                }
+                else {
+                    create();
+                }
+                
+                function create() {
+                    // node 0.8.x adds a "wx" shortcut, but since it's not in 0.6.x we use the
+                    // longhand here.
+                    var flags = constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
+                    fs.open(tempPath, flags, mode, function (err, fd) {
+                        if (err) return error(err);
+                        
+                        fs.fchown(fd, uid, gid, function(err) {
+                            fs.close(fd);
+                            if (err) return error(err);
+                            
+                            pipe(fs.WriteStream(tempPath, {
+                                encoding: options.encoding || null,
+                                mode: mode
+                            }));                        
+                        });
+                    });
+                }
             });
         }
 
@@ -762,6 +784,7 @@ module.exports = function setup(fsOptions) {
     }
 
     function watch(path, options, callback) {
+        console.log(path, options)
         var meta = {};
         resolvePath(path, function (err, path) {
             if (err) return callback(err);
@@ -1068,5 +1091,5 @@ function uid(length) {
 }
 
 function tmpFile(baseDir, prefix, suffix) {
-    return join(baseDir, [prefix || "", uid(16), suffix || ""].join(""));
+    return join(baseDir, [prefix || "", uid(20), suffix || ""].join(""));
 }
