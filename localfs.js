@@ -335,7 +335,6 @@ module.exports = function setup(fsOptions) {
     }
 
     function readdir(path, options, callback) {
-
         var meta = {};
 
         resolvePath(path, function (err, path) {
@@ -695,11 +694,11 @@ module.exports = function setup(fsOptions) {
         
         if (!options.overwrite) {
             resolvePath(to, function(err, path){
-                if (err.code == "ENOENT")
-                    return innerCopy(from, to);
-                    
-                if (err) 
+                if (err) {
+                    if (err.code == "ENOENT")
+                        return innerCopy(from, to);
                     return callback(err);
+                }
                 
                 fs.stat(path, function(err, stat){
                     if (!err && stat && !stat.err) {
@@ -742,9 +741,12 @@ module.exports = function setup(fsOptions) {
                                     callback(new Error(d));
                             });
                             proc.stdout.on("end", function() {
-                                callback(null, {
-                                    to: to,
-                                    meta: null
+                                exists(rTo, function(exists) {
+                                    console.log("COPY EXISTS", exists)
+                                    if (exists)
+                                        callback(null, { to: to, meta: null });
+                                    else
+                                        callback(new Error("Unknown Failure"));
                                 });
                             });
                         });
