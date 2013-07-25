@@ -548,15 +548,18 @@ describe('vfs-local', function () {
         if (err) throw err;
         expect(meta).property("watcher").ok;
         var watcher = meta.watcher;
-        watcher.on("change", function (event, filename) {
-          watcher.close();
+        watcher.on("change", function listen(event, filename) {
+          watcher.removeListener("change", listen);
           expect(event).equal("change");
           expect(filename).equal(vpath.substr(1));
-          writable.end();
           writable.on("close", function () {
+            watcher.on("change", function (event, filename) {
+                watcher.close();
+                done();
+            });
             fs.unlinkSync(base + vpath);
-            done();
           });
+          writable.end();
         });
         writable.write("Change!");
       });
