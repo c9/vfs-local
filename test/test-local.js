@@ -548,18 +548,26 @@ describe('vfs-local', function () {
         if (err) throw err;
         expect(meta).property("watcher").ok;
         var watcher = meta.watcher;
+        var count = 0;
         watcher.on("change", function listen(event, filename) {
-          watcher.removeListener("change", listen);
           expect(event).equal("change");
           expect(filename).equal(vpath.substr(1));
-          writable.on("close", function () {
-            watcher.on("change", function (event, filename) {
-                watcher.close();
-                done();
-            });
-            fs.unlinkSync(base + vpath);
+          count++;
+          
+          if (count > 1)
+            throw new Error("Count mismatch: " + count);
+        
+          setTimeout(function(){
+            watcher.removeListener("change", listen);
+            writable.end();
+          }, 1000);
+        });
+        writable.on("close", function () {
+          watcher.on("change", function (event, filename) {
+              watcher.close();
+              done();
           });
-          writable.end();
+          fs.unlinkSync(base + vpath);
         });
         writable.write("Change!");
       });
