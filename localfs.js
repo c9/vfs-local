@@ -12,6 +12,7 @@ var getMime = require("simple-mime")("application/octet-stream");
 var vm = require("vm");
 var exists = fs.exists || require("path").exists;
 var crypto = require("crypto");
+var os = require("os");
 
 module.exports = function setup(fsOptions) {
     try {
@@ -498,7 +499,7 @@ module.exports = function setup(fsOptions) {
         
         
         function createTempFile() {
-            tempPath = tmpFile(tmpDir(), "." + basename(resolvedPath) + "-", "~");
+            tempPath = tmpFile(tmpdir(), "." + basename(resolvedPath) + "-", "~");
 
             var mode = options.mode || umask & 0666;
             fs.stat(resolvedPath, function(err, stat) {
@@ -1075,12 +1076,18 @@ function calcEtag(stat) {
   return (stat.isFile() ? '': 'W/') + '"' + (stat.ino || 0).toString(36) + "-" + stat.size.toString(36) + "-" + stat.mtime.valueOf().toString(36) + '"';
 }
 
-function tmpDir() {
-    return process.env.TMPDIR ||
-        process.env.TMP ||
-        process.env.TEMP ||
-        "/tmp";
-}
+var tmpdir = os.tmpdir || function() {
+    if (process.platform === 'win32') {
+        return process.env.TEMP ||
+            process.env.TMP ||
+            (process.env.SystemRoot || process.env.windir) + '\\temp';
+    } else {
+        return process.env.TMPDIR ||
+            process.env.TMP ||
+            process.env.TEMP ||
+            '/tmp';
+    }
+};
 
 function uid(length) {
     return (crypto
