@@ -786,7 +786,6 @@ module.exports = function setup(fsOptions) {
     }
 
     function watch(path, options, callback) {
-        console.log(path, options)
         var meta = {};
         resolvePath(path, function (err, path) {
             if (err) return callback(err);
