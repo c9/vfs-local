@@ -743,7 +743,6 @@ module.exports = function setup(fsOptions) {
                             });
                             proc.stdout.on("end", function() {
                                 exists(rTo, function(exists) {
-                                    console.log("COPY EXISTS", exists)
                                     if (exists)
                                         callback(null, { to: to, meta: null });
                                     else
