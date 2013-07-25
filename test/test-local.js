@@ -543,33 +543,32 @@ describe('vfs-local', function () {
     it("should notice a directly watched file change", function (done) {
       var vpath = "/newfile.txt";
       expect(fs.existsSync(base + vpath)).not.ok;
-      var writable = fs.createWriteStream(base + vpath);
-      vfs.watch(vpath, {}, function (err, meta) {
-        if (err) throw err;
-        expect(meta).property("watcher").ok;
-        var watcher = meta.watcher;
-        var count = 0;
-        watcher.on("change", function listen(event, filename) {
-          expect(event).equal("change");
-          expect(filename).equal(vpath.substr(1));
-          count++;
-          
-          if (count > 1)
-            throw new Error("Count mismatch: " + count);
-        
-          setTimeout(function(){
-            watcher.removeListener("change", listen);
-            writable.end();
-          }, 1000);
-        });
-        writable.on("close", function () {
-          watcher.on("change", function (event, filename) {
+      fs.writeFile(base + vpath, "Test", function(){
+        vfs.watch(vpath, {}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("watcher").ok;
+          var watcher = meta.watcher;
+          var count = 0;
+          watcher.on("change", function listen(event, filename) {
+            expect(event).equal("change");
+            expect(filename).equal(vpath.substr(1));
+            count++;
+            
+            if (inner) {
+              expect(count).equals(3);
               watcher.close();
               done();
+            }
           });
-          fs.unlinkSync(base + vpath);
+          
+          var inner = false;
+          fs.writeFile(base + vpath, "Change!", function(){
+            setTimeout(function(){
+              inner = true;
+              fs.unlinkSync(base + vpath);
+            }, 100);
+          })
         });
-        writable.write("Change!");
       });
     });
     it("should notice a new file in a watched directory", function (done) {
