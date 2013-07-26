@@ -281,7 +281,7 @@ module.exports = function setup(fsOptions) {
             meta.etag = calcEtag(stat);
 
             // ETag support
-            if (options.etag === meta.etag) {
+            if (stat.mtime % 1000 && options.etag === meta.etag) {
                 meta.notModified = true;
                 fs.close(fd);
                 return callback(null, meta);
@@ -350,7 +350,7 @@ module.exports = function setup(fsOptions) {
 
                 // ETag support
                 meta.etag = calcEtag(stat);
-                if (options.etag === meta.etag) {
+                if (stat.mtime % 1000 && options.etag === meta.etag) {
                     meta.notModified = true;
                     return callback(null, meta);
                 }
