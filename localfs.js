@@ -785,23 +785,67 @@ module.exports = function setup(fsOptions) {
         });
     }
 
+    function WatcherWrapper(path, options){
+        var listeners  = [];
+        var persistent = options.persistent;
+        var watcher;
+        
+        function watch(){
+            if (options.file) {
+                watcher = fs.watchFile(path, { persistent: false }, function () {});
+                watcher.close = function () { fs.unwatchFile(path); };
+            }
+            else {
+                watcher = fs.watch(path, { persistent: false }, function () {});
+            }
+            
+            watcher.on("change", function(event, filename){
+                listeners.forEach(function(fn){
+                    fn(event, filename);
+                });
+                
+                if (persistent !== false)
+                    try{ 
+                        watcher.close();
+                        watch(); 
+                    } catch(e) { }
+            });
+        }
+        
+        this.close = function(){
+            watcher.close();
+        }
+        
+        this.on = function(name, fn){
+            if (name != "change")
+                watcher.on.apply(watcher, arguments);
+            else {
+                listeners.push(fn)
+            }
+        }
+        
+        this.removeListener = function(name, fn){
+            if (name != "change")
+                watcher.removeListener.apply(watcher, arguments);
+            else {
+                listeners.splice(listeners.indexOf(fn), 1);
+            }
+        }
+        
+        watch();
+    }
+
     function watch(path, options, callback) {
         var meta = {};
         resolvePath(path, function (err, path) {
             if (err) return callback(err);
-            if (options.file) {
-                meta.watcher = fs.watchFile(path, options, function () {});
-                meta.watcher.close = function () {
-                    fs.unwatchFile(path);
-                };
+            
+            try {
+                meta.watcher = new WatcherWrapper(path, options);
+            } catch (e) {
+                return callback(e);
             }
-            else {
-                try {
-                    meta.watcher = fs.watch(path, options, function () {});
-                } catch (e) {
-                    return callback(e);
-                }
-            }
+            
             callback(null, meta);
         });
     }

@@ -540,7 +540,7 @@ describe('vfs-local', function () {
   });
 
   describe('vfs.watch()', function () {
-    it("should notice a directly watched file change", function (done) {
+    it("should notice a directly watched file change (OS changing it)", function (done) {
       var vpath = "/newfile.txt";
       expect(fs.existsSync(base + vpath)).not.ok;
       fs.writeFile(base + vpath, "Test", function(){
@@ -550,12 +550,12 @@ describe('vfs-local', function () {
           var watcher = meta.watcher;
           var count = 0;
           watcher.on("change", function listen(event, filename) {
-            expect(event).equal("change");
+            // expect(event).equal("change");
             expect(filename).equal(vpath.substr(1));
             count++;
             
             if (inner) {
-              expect(count).equals(3);
+              // expect(count).equals(3);
               watcher.close();
               done();
             }
@@ -568,6 +568,40 @@ describe('vfs-local', function () {
               fs.unlinkSync(base + vpath);
             }, 100);
           })
+        });
+      });
+    });
+    it("should notice a directly watched file change (change via VFS)", function (done) {
+      var vpath = "/newfile.txt";
+      expect(fs.existsSync(base + vpath)).not.ok;
+      fs.writeFile(base + vpath, "Test", function(){
+        vfs.watch(vpath, {}, function (err, meta) {
+          if (err) throw err;
+          expect(meta).property("watcher").ok;
+          var watcher = meta.watcher;
+          var count = 0;
+          watcher.on("change", function listen(event, filename) {
+            // expect(event).equal("change");
+            expect(filename).equal(vpath.substr(1));
+            count++;
+            
+            if (inner) {
+              // expect(count).equals(2);
+              watcher.close();
+              done();
+            }
+          });
+          
+          var inner = false;
+          vfs.mkfile(vpath, {}, function(err, meta){
+            var stream = meta.stream;
+            stream.write("Change!");
+            stream.end();
+            setTimeout(function(){
+              inner = true;
+              fs.unlinkSync(base + vpath);
+            }, 100);
+          });
         });
       });
     });
