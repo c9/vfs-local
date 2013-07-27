@@ -19,7 +19,9 @@ module.exports = function setup(fsOptions) {
     try {
         var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
     } catch(e) {
-        console.warn("unable to initialize pty.js", e);
+        console.warn("unable to initialize " 
+            + (fsOptions.local ? "pty.nw.js" : "pty.js") + ":");
+        console.warn(e);
         pty = function(){};
     }
     // Get the separator char. In Node 0.8, we can use path.sep instead
@@ -500,7 +502,7 @@ module.exports = function setup(fsOptions) {
         
         
         function createTempFile() {
-            tempPath = tmpFile(tmpdir(), "." + basename(resolvedPath) + "-", "~");
+            tempPath = tmpFile(fsOptions.tmpdir, "." + basename(resolvedPath) + "-", "~");
 
             var mode = options.mode || umask & 0666;
             fs.stat(resolvedPath, function(err, stat) {
@@ -1189,19 +1191,6 @@ function evaluate(code) {
 function calcEtag(stat) {
   return (stat.isFile() ? '': 'W/') + '"' + (stat.ino || 0).toString(36) + "-" + stat.size.toString(36) + "-" + stat.mtime.valueOf().toString(36) + '"';
 }
-
-var tmpdir = os.tmpdir || function() {
-    if (process.platform === 'win32') {
-        return process.env.TEMP ||
-            process.env.TMP ||
-            (process.env.SystemRoot || process.env.windir) + '\\temp';
-    } else {
-        return process.env.TMPDIR ||
-            process.env.TMP ||
-            process.env.TEMP ||
-            '/tmp';
-    }
-};
 
 function uid(length) {
     return (crypto
