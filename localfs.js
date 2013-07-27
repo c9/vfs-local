@@ -17,6 +17,7 @@ var os = require("os");
 
 module.exports = function setup(fsOptions) {
     try {
+        if (fsOptions.local) throw new Error();
         var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
     } catch(e) {
         console.warn("unable to initialize " 
@@ -106,7 +107,6 @@ module.exports = function setup(fsOptions) {
         var alreadyRooted = options.alreadyRooted;
         var checkSymlinks = options.checkSymlinks === undefined ? true : options.checkSymlinks;
         
-        
         if (checkSymlinks === undefined)
             checkSymlinks = true;
         if (path.substr(0, 2) == "~/")
@@ -119,10 +119,13 @@ module.exports = function setup(fsOptions) {
 
         function check(err, path) {
             if (err) return callback(err);
-            if (!(path === base || path.substr(0, root.length) === root)) {
-                err = new Error("EACCESS: '" + path + "' not in '" + root + "'");
-                err.code = "EACCESS";
-                return callback(err);
+            
+            if (!options.nocheck) {
+                if (!(path === base || path.substr(0, root.length) === root)) {
+                    err = new Error("EACCESS: '" + path + "' not in '" + root + "'");
+                    err.code = "EACCESS";
+                    return callback(err);
+                }
             }
             callback(null, path);
         }
@@ -955,27 +958,31 @@ module.exports = function setup(fsOptions) {
             options.env = fsOptions.defaultEnv;
         }
         
-        var child;
-        try {
-            child = childProcess.spawn(executablePath, args, options);
-        } catch (err) {
-            return callback(err);
-        }
-        if (options.resumeStdin) child.stdin.resume();
-        if (options.hasOwnProperty('stdoutEncoding')) {
-            child.stdout.setEncoding(options.stdoutEncoding);
-        }
-        if (options.hasOwnProperty('stderrEncoding')) {
-            child.stderr.setEncoding(options.stderrEncoding);
-        }
-        
-        // node 0.10.x emits error events if the file does not exist
-        child.on("error", function(err) {
-          child.emit("exit", 127);
-        });
-
-        callback(null, {
-            process: child
+        resolvePath(executablePath, { nocheck: 1 }, function(err, path){
+            if (err) return callback(err);
+            
+            var child;
+            try {
+                child = childProcess.spawn(path, args, options);
+            } catch (err) {
+                return callback(err);
+            }
+            if (options.resumeStdin) child.stdin.resume();
+            if (options.hasOwnProperty('stdoutEncoding')) {
+                child.stdout.setEncoding(options.stdoutEncoding);
+            }
+            if (options.hasOwnProperty('stderrEncoding')) {
+                child.stderr.setEncoding(options.stderrEncoding);
+            }
+            
+            // node 0.10.x emits error events if the file does not exist
+            child.on("error", function(err) {
+              child.emit("exit", 127);
+            });
+    
+            callback(null, {
+                process: child
+            });
         });
     }
     
@@ -988,7 +995,7 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
-        
+    
         // Pty is only reading from the object itself;
         var env = {};
         for (var prop in options.env) {
@@ -998,42 +1005,50 @@ module.exports = function setup(fsOptions) {
         options.env = env;
         if (options.cwd && options.cwd.charAt(0) == "~")
             options.cwd = env.HOME + options.cwd.substr(1);
-
-        var proc;
-        try {
-            proc = pty.spawn(executablePath, args, options);
-            proc.on("error", function(){
-                // Prevent PTY from throwing an error;
-                // I don't know how to test and the src is funky because
-                // it tests for .length < 2. Who is setting the other event?
-            });
-        } catch (err) {
-            return callback(err);
-        }
         
-        callback(null, {
-            pty: proc
+        resolvePath(executablePath, { nocheck: 1 }, function(err, path){
+            if (err) return callback(err);
+    
+            var proc;
+            try {
+                proc = pty.spawn(path, args, options);
+                proc.on("error", function(){
+                    // Prevent PTY from throwing an error;
+                    // I don't know how to test and the src is funky because
+                    // it tests for .length < 2. Who is setting the other event?
+                });
+            } catch (err) {
+                return callback(err);
+            }
+            
+            callback(null, {
+                pty: proc
+            });
         });
     }
 
     function execFile(executablePath, options, callback) {
-
         if (options.hasOwnProperty('env')) {
             options.env.__proto__ = fsOptions.defaultEnv;
         } else {
             options.env = fsOptions.defaultEnv;
         }
         
-        childProcess.execFile(executablePath, options.args || [], options, function (err, stdout, stderr) {
-            if (err) {
-                err.stderr = stderr;
-                err.stdout = stdout;
-                return callback(err);
-            }
-
-            callback(null, {
-                stdout: stdout,
-                stderr: stderr
+        resolvePath(executablePath, { nocheck: 1 }, function(err, path){
+            if (err) return callback(err);
+            
+            childProcess.execFile(path, options.args || [], 
+              options, function (err, stdout, stderr) {
+                if (err) {
+                    err.stderr = stderr;
+                    err.stdout = stdout;
+                    return callback(err);
+                }
+    
+                callback(null, {
+                    stdout: stdout,
+                    stderr: stderr
+                });
             });
         });
     }
