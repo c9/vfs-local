@@ -1051,6 +1051,7 @@ module.exports = function setup(fsOptions) {
             
             childProcess.execFile(path, options.args || [], 
               options, function (err, stdout, stderr) {
+                  console.log("EXEC:", stdout, stderr)
                 if (err) {
                     err.stderr = stderr;
                     err.stdout = stdout;
