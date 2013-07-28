@@ -63,6 +63,7 @@ module.exports = function setup(fsOptions) {
         readdir: readdir,
         mkfile: mkfile,
         mkdir: mkdir,
+        mkdirP: mkdirP,
         rmfile: rmfile,
         rmdir: rmdir,
         rename: rename,
@@ -665,6 +666,8 @@ module.exports = function setup(fsOptions) {
 
     function mkdirP(path, options, callback) {
         resolvePath(path, { checkSymlinks: false}, function(err, dir) {
+            if (err) return callback(err);
+            
             exists(dir, function(exists) {
                 if (exists) return callback(null, {}); 
                 execFile("mkdir", { args: ["-p", dir] }, function(err) {
@@ -958,7 +961,10 @@ module.exports = function setup(fsOptions) {
             options.env = fsOptions.defaultEnv;
         }
         
-        resolvePath(executablePath, { nocheck: 1 }, function(err, path){
+        resolvePath(executablePath, { 
+            nocheck       : 1,
+            alreadyRooted : true
+        }, function(err, path){
             if (err) return callback(err);
             
             var child;
@@ -1006,7 +1012,10 @@ module.exports = function setup(fsOptions) {
         if (options.cwd && options.cwd.charAt(0) == "~")
             options.cwd = env.HOME + options.cwd.substr(1);
         
-        resolvePath(executablePath, { nocheck: 1 }, function(err, path){
+        resolvePath(executablePath, { 
+            nocheck       : 1,
+            alreadyRooted : true
+        }, function(err, path){
             if (err) return callback(err);
     
             var proc;
@@ -1034,7 +1043,10 @@ module.exports = function setup(fsOptions) {
             options.env = fsOptions.defaultEnv;
         }
         
-        resolvePath(executablePath, { nocheck: 1 }, function(err, path){
+        resolvePath(executablePath, {
+            nocheck       : 1,
+            alreadyRooted : true
+        }, function(err, path){
             if (err) return callback(err);
             
             childProcess.execFile(path, options.args || [], 
