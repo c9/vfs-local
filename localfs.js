@@ -16,15 +16,23 @@ var crypto = require("crypto");
 var os = require("os");
 
 module.exports = function setup(fsOptions) {
-    try {
-        if (fsOptions.local) throw new Error();
-        var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
-    } catch(e) {
-        console.warn("unable to initialize " 
-            + (fsOptions.local ? "pty.nw.js" : "pty.js") + ":");
-        console.warn(e);
-        pty = function(){};
+    if (!fsOptions.nopty) {
+        try {
+            if (fsOptions.local) throw new Error();
+            var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
+        } catch(e) {
+            console.warn("unable to initialize " 
+                + (fsOptions.local ? "pty.nw.js" : "pty.js") + ":");
+            console.warn(e);
+            pty = function(){};
+        }
     }
+    else {
+        pty = function(){
+            console.log("PTY is not supported.");
+        };
+    }
+        
     // Get the separator char. In Node 0.8, we can use path.sep instead
     var pathSep = pathNormalize("/");
     
