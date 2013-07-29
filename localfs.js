@@ -968,6 +968,8 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
+        if (options.cwd && options.cwd.charAt(0) == "~")
+            options.cwd = options.env.HOME + options.cwd.substr(1);
         
         resolvePath(executablePath, { 
             nocheck       : 1,
@@ -1050,6 +1052,8 @@ module.exports = function setup(fsOptions) {
         } else {
             options.env = fsOptions.defaultEnv;
         }
+        if (options.cwd && options.cwd.charAt(0) == "~")
+            options.cwd = options.env.HOME + options.cwd.substr(1);
         
         resolvePath(executablePath, {
             nocheck       : 1,
