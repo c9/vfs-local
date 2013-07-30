@@ -130,7 +130,8 @@ module.exports = function setup(fsOptions) {
             if (err) return callback(err);
             
             if (!options.nocheck) {
-                if (!(path === base || path.substr(0, root.length) === root)) {
+                if (!(path === base || path.substr(0, root.length) === root) && 
+                  (path.substr(0, process.env.HOME.length) !== process.env.HOME)) {
                     err = new Error("EACCESS: '" + path + "' not in '" + root + "'");
                     err.code = "EACCESS";
                     return callback(err);
