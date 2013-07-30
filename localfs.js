@@ -48,7 +48,7 @@ module.exports = function setup(fsOptions) {
     if (root[root.length - 1] !== pathSep) root += pathSep;
     var base = root.substr(0, root.length - 1);
     // root = "/" doesn't work on windows
-    if (pathSep == "\\" && root == "/") root = "";
+    if (pathSep == "\\" && root == pathSep) root = "";
 
     var umask = fsOptions.umask || 0750;
     if (fsOptions.hasOwnProperty('defaultEnv')) {
@@ -471,7 +471,7 @@ module.exports = function setup(fsOptions) {
                 });
                 // Resume the input stream if possible
                 if (readable.resume) readable.resume();
-            }            
+            }
         }
         
         var tempPath;
@@ -516,13 +516,14 @@ module.exports = function setup(fsOptions) {
         
         function createTempFile() {
             tempPath = tmpFile(fsOptions.tmpdir, "." + basename(resolvedPath) + "-", "~");
-
+            
+            var retries = 1;
             var mode = options.mode || umask & 0666;
             fs.stat(resolvedPath, function(err, stat) {
                 if (err && err.code !== "ENOENT") return error(err);
                 
-                var uid = process.getuid();
-                var gid = process.getgid();
+                var uid = process.getuid ? process.getuid() : 0;
+                var gid = process.getgid ? process.getgid() : 0;
                 
                 if (stat) {
                     mode = stat.mode & 0777;
@@ -555,7 +556,11 @@ module.exports = function setup(fsOptions) {
                     // longhand here.
                     var flags = constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
                     fs.open(tempPath, flags, mode, function (err, fd) {
-                        if (err) return error(err);
+                        if (err) {
+                            if (err.code === "ENOENT" && retries--)
+                                return fs.mkdir(tmpdir(), create);
+                            return error(err);
+                        }
                         
                         fs.fchown(fd, uid, gid, function(err) {
                             fs.close(fd);
