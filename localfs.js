@@ -8,6 +8,7 @@ var pathNormalize = require("path").normalize;
 var dirname = require("path").dirname;
 var basename = require("path").basename;
 var Stream = require("stream").Stream;
+var EventEmitter = require("events").EventEmitter;
 var getMime = require("simple-mime")("application/octet-stream");
 var vm = require("vm");
 var exists = fs.exists || require("path").exists;
@@ -570,7 +571,7 @@ module.exports = function setup(fsOptions) {
             else {
                 writable.on('open', function () {
                     if (hadError) return;
-                    meta.stream = writable;
+                    meta.stream = wrapStream(writable);
                     callback();
                 });
             }
@@ -580,17 +581,86 @@ module.exports = function setup(fsOptions) {
             });
             writable.on('close', function () {
                 if (hadError) return;
-                swap(path);
+                swap();
             });
 
             resume();
         }
         
+        function wrapStream(stream) {
+            var emitter = new EventEmitter();
+            var wrapper = {};
+            
+            for (var key in stream) {
+                if (key !== "on" && key !== "addListener") {
+                    (function(key) {
+                        Object.defineProperty(wrapper, key, {
+                            get : function() { return stream[key] },
+                            set : function(value){ stream[key] = value; },
+                            enumerable : true,
+                            configurable : true
+                       });
+                    })(key);
+                }
+            }
+                    
+            wrapper.on = wrapper.addListener = function(type, varargs) {
+                if (type == "close")
+                    return emitter.on.apply(emitter, arguments);
+                else
+                    return stream.on.apply(stream, arguments);
+            };
+
+            wrapper._close = function() {
+                emitter.emit("close");
+                wrapper.on = wrapper.addListener = stream.on.bind(stream);
+            };
+            
+            return wrapper;
+        }
+        
         function swap() {
             fs.rename(tempPath, resolvedPath, function (err) {
+                if (err && err.code == "EXDEV") {
+                    // if $TEMP is on a different decive copy the file
+                    copyFile(tempPath, resolvedPath, function(err) {
+                        fs.unlink(tempPath, function() {});
+                        if (err) return error(err);
+
+                        if (meta.stream) meta.stream._close();
+                        callback();
+                    });
+                    return;
+                }
                 if (err) return error(err);
+
+                if (meta.stream) meta.stream._close();
                 callback();
             });
+        }
+        
+        function copyFile(source, target, callback) {
+            var cbCalled = false;
+            
+            var rd = fs.createReadStream(source);
+            rd.on("error", function(err) {
+                done(err);
+            });
+            var wr = fs.createWriteStream(target);
+            wr.on("error", function(err) {
+                done(err);
+            });
+            wr.on("close", function(ex) {
+                done();
+            });
+            rd.pipe(wr);
+          
+            function done(err) {
+                if (!cbCalled) {
+                    callback(err);
+                    cbCalled = true;
+                }
+            }
         }
     }
 
@@ -701,7 +771,7 @@ module.exports = function setup(fsOptions) {
         
         if (!options.overwrite) {
             resolvePath(to, function(err, path){
-                if (err.code == "ENOENT")
+                if (err && err.code == "ENOENT")
                     return innerCopy(from, to);
                     
                 if (err) 
@@ -790,7 +860,6 @@ module.exports = function setup(fsOptions) {
     }
 
     function watch(path, options, callback) {
-        // console.log(path, options)
         var meta = {};
         resolvePath(path, function (err, path) {
             if (err) return callback(err);
