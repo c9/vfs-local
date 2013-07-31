@@ -893,17 +893,19 @@ module.exports = function setup(fsOptions) {
             }
             
             watcher.on("change", function(event, filename){
-                console.log("####### LISTENERS COUNT", listeners.length);
-                
                 listeners.forEach(function(fn){
                     fn(event, filename);
                 });
                 
-                if (persistent !== false)
-                    try{ 
-                        watcher.close();
-                        watch(); 
-                    } catch(e) { }
+                if (persistent !== false) {
+                    // This timeout fixes an eternal loop that can occur with watchers
+                    setTimeout(function(){
+                        try{ 
+                            watcher.close();
+                            watch(); 
+                        } catch(e) { }
+                    });
+                }
             });
         }
         
