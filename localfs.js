@@ -893,6 +893,8 @@ module.exports = function setup(fsOptions) {
             }
             
             watcher.on("change", function(event, filename){
+                console.log("####### LISTENERS COUNT", listeners.length);
+                
                 listeners.forEach(function(fn){
                     fn(event, filename);
                 });
