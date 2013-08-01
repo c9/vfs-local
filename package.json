@@ -22,7 +22,7 @@
         "vfs-lint": "~0.0.0"
     },
     "scripts": {
-        "test": "git clean -df test/mock; mocha -R spec"
+        "test": "git clean -df test/mock; mocha -b -R spec"
     },
     "licenses" : [{
         "type" : "MIT"

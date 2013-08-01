@@ -38,6 +38,8 @@ module.exports = function setup(fsOptions) {
     
     var METAPATH   = fsOptions.metapath;
     var WSMETAPATH = fsOptions.wsmetapath;
+    var TESTING    = fsOptions.testing;
+    var TMPDIR     = fsOptions.tmpdir || "/tmp";
 
     // Check and configure options
     var root = fsOptions.root;
@@ -114,24 +116,29 @@ module.exports = function setup(fsOptions) {
         }
         
         var alreadyRooted = options.alreadyRooted;
-        var checkSymlinks = options.checkSymlinks === undefined ? true : options.checkSymlinks;
+        var checkSymlinks = options.checkSymlinks === undefined 
+            ? true : options.checkSymlinks;
+        var isHome        = false;
         
         if (checkSymlinks === undefined)
             checkSymlinks = true;
-        if (path.substr(0, 2) == "~/")
+        if (path.substr(0, 2) == "~/") {
+            isHome = true;
             path = process.env.HOME + path.substr(1);
+        }
         else if (!alreadyRooted) 
             path = join(root, path);
 
-        if (checkSymlinks && fsOptions.checkSymlinks) fs.realpath(path, check);
+        if (checkSymlinks && fsOptions.checkSymlinks && !alreadyRooted) 
+            fs.realpath(path, check);
         else check(null, path);
 
         function check(err, path) {
             if (err) return callback(err);
             
             if (!options.nocheck) {
-                if (!(path === base || path.substr(0, root.length) === root) && 
-                  (path.substr(0, process.env.HOME.length) !== process.env.HOME)) {
+                if (!(path === base || path.substr(0, root.length) === root)
+                  && !isHome) {
                     err = new Error("EACCESS: '" + path + "' not in '" + root + "'");
                     err.code = "EACCESS";
                     return callback(err);
@@ -297,7 +304,7 @@ module.exports = function setup(fsOptions) {
             meta.etag = calcEtag(stat);
 
             // ETag support
-            if (stat.mtime % 1000 && options.etag === meta.etag) {
+            if ((TESTING || stat.mtime % 1000) && options.etag === meta.etag) {
                 meta.notModified = true;
                 fs.close(fd);
                 return callback(null, meta);
@@ -366,7 +373,7 @@ module.exports = function setup(fsOptions) {
 
                 // ETag support
                 meta.etag = calcEtag(stat);
-                if (stat.mtime % 1000 && options.etag === meta.etag) {
+                if ((TESTING || stat.mtime % 1000) && options.etag === meta.etag) {
                     meta.notModified = true;
                     return callback(null, meta);
                 }
@@ -515,7 +522,7 @@ module.exports = function setup(fsOptions) {
         
         
         function createTempFile() {
-            tempPath = tmpFile(fsOptions.tmpdir, "." + basename(resolvedPath) + "-", "~");
+            tempPath = tmpFile(TMPDIR, "." + basename(resolvedPath) + "-", "~");
             
             var retries = 1;
             var mode = options.mode || umask & 0666;
@@ -892,24 +899,28 @@ module.exports = function setup(fsOptions) {
                 watcher = fs.watch(path, { persistent: false }, function () {});
             }
             
-            watcher.on("change", function(event, filename){
-                listeners.forEach(function(fn){
-                    fn(event, filename);
-                });
-                
-                if (persistent !== false) {
-                    // This timeout fixes an eternal loop that can occur with watchers
-                    setTimeout(function(){
-                        try{ 
-                            watcher.close();
-                            watch(); 
-                        } catch(e) { }
-                    });
-                }
+            watcher.on("change", listen);
+        }
+        
+        function listen(event, filename){
+            listeners.forEach(function(fn){
+                fn(event, filename);
             });
+            
+            if (persistent !== false) {
+                // This timeout fixes an eternal loop that can occur with watchers
+                setTimeout(function(){
+                    try{ 
+                        watcher.close();
+                        watch(); 
+                    } catch(e) { }
+                });
+            }
         }
         
         this.close = function(){
+            listeners  = [];
+            watcher.removeListener("change", listen);
             watcher.close();
         }
         

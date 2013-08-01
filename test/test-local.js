@@ -9,6 +9,7 @@ describe('vfs-local', function () {
 
   var vfs = require('vfs-lint')(require("vfs-local")({
     root: root,
+    testing: true,
     defaultEnv: { CUSTOM: 43 },
     checkSymlinks: true
   }));
@@ -235,7 +236,7 @@ describe('vfs-local', function () {
   });
 
   describe('vfs.mkfile()', function () {
-    it("should create a file using using readble in options", function (done) {
+    it("should create a file using using readable in options", function (done) {
       var stream = fs.createReadStream(__filename);
       var vpath = "/test.js";
       // Make sure the file doesn't exist.
@@ -548,14 +549,11 @@ describe('vfs-local', function () {
           if (err) throw err;
           expect(meta).property("watcher").ok;
           var watcher = meta.watcher;
-          var count = 0;
           watcher.on("change", function listen(event, filename) {
             // expect(event).equal("change");
             expect(filename).equal(vpath.substr(1));
-            count++;
             
             if (inner) {
-              // expect(count).equals(3);
               watcher.close();
               done();
             }
@@ -579,14 +577,11 @@ describe('vfs-local', function () {
           if (err) throw err;
           expect(meta).property("watcher").ok;
           var watcher = meta.watcher;
-          var count = 0;
           watcher.on("change", function listen(event, filename) {
             // expect(event).equal("change");
             expect(filename).equal(vpath.substr(1));
-            count++;
             
             if (inner) {
-              // expect(count).equals(2);
               watcher.close();
               done();
             }
