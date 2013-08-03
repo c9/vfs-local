@@ -837,17 +837,17 @@ module.exports = function setup(fsOptions) {
                             if (err) return callback(err);
                             
                             var proc = child.process;
+                            var hasError;
+                            
                             proc.stderr.on("data", function(d){
-                                if (d)
+                                if (d) {
+                                    hasError = true;
                                     callback(new Error(d));
+                                }
                             });
                             proc.stdout.on("end", function() {
-                                exists(rTo, function(exists) {
-                                    if (exists)
-                                        callback(null, { to: to, meta: null });
-                                    else
-                                        callback(new Error("Unknown Failure"));
-                                });
+                                if (!hasError)
+                                    callback(null, { to: to, meta: null });
                             });
                         });
                     });
