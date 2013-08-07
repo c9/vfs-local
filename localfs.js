@@ -8,17 +8,17 @@ var pathNormalize = require("path").normalize;
 var dirname = require("path").dirname;
 var basename = require("path").basename;
 var Stream = require("stream").Stream;
-var EventEmitter = require("events").EventEmitter;
 var getMime = require("simple-mime")("application/octet-stream");
 var vm = require("vm");
 var exists = fs.exists || require("path").exists;
 var crypto = require("crypto");
 
 module.exports = function setup(fsOptions) {
+    var pty;
     if (!fsOptions.nopty) {
         try {
             if (fsOptions.local) throw new Error();
-            var pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
+            pty = fsOptions.local ? require('pty.nw.js') : require('pty.js');
         } catch(e) {
             console.warn("unable to initialize " 
                 + (fsOptions.local ? "pty.nw.js" : "pty.js") + ":");
