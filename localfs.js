@@ -13,7 +13,6 @@ var getMime = require("simple-mime")("application/octet-stream");
 var vm = require("vm");
 var exists = fs.exists || require("path").exists;
 var crypto = require("crypto");
-var os = require("os");
 
 module.exports = function setup(fsOptions) {
     if (!fsOptions.nopty) {
@@ -39,7 +38,6 @@ module.exports = function setup(fsOptions) {
     var METAPATH   = fsOptions.metapath;
     var WSMETAPATH = fsOptions.wsmetapath;
     var TESTING    = fsOptions.testing;
-    var TMPDIR     = fsOptions.tmpdir || "/tmp";
 
     // Check and configure options
     var root = fsOptions.root;
@@ -522,9 +520,8 @@ module.exports = function setup(fsOptions) {
         
         
         function createTempFile() {
-            tempPath = tmpFile(TMPDIR, "." + basename(resolvedPath) + "-", "~");
+            tempPath = tmpFile(dirname(resolvedPath), "." + basename(resolvedPath) + "-", "~");
             
-            var retries = 1;
             var mode = options.mode || umask & 0666;
             fs.stat(resolvedPath, function(err, stat) {
                 if (err && err.code !== "ENOENT") return error(err);
@@ -538,48 +535,22 @@ module.exports = function setup(fsOptions) {
                     gid = stat.gid;
                 }
 
-                if (!stat) {
-                    // check if we can create a writable file
-                    fs.open(resolvedPath, constants.O_CREAT | constants.O_APPEND, function(err, fd) {
+                // node 0.8.x adds a "wx" shortcut, but since it's not in 0.6.x we use the
+                // longhand here.
+                var flags = constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
+                fs.open(tempPath, flags, mode, function (err, fd) {
+                    if (err) return error(err);
+                    
+                    fs.fchown(fd, uid, gid, function(err) {
+                        fs.close(fd);
                         if (err) return error(err);
                         
-                        fs.close(fd, function(err) {
-                            if (err) return error(err);
-                            
-                            fs.unlink(resolvedPath, function(err) {
-                                if (err) return error(err);
-                                
-                                create();
-                            });
-                        });
+                        pipe(fs.WriteStream(tempPath, {
+                            encoding: options.encoding || null,
+                            mode: mode
+                        }));
                     });
-                }
-                else {
-                    create();
-                }
-                
-                function create() {
-                    // node 0.8.x adds a "wx" shortcut, but since it's not in 0.6.x we use the
-                    // longhand here.
-                    var flags = constants.O_CREAT | constants.O_WRONLY | constants.O_EXCL;
-                    fs.open(tempPath, flags, mode, function (err, fd) {
-                        if (err) {
-                            if (err.code === "ENOENT" && retries--)
-                                return fs.mkdir(tmpdir(), create);
-                            return error(err);
-                        }
-                        
-                        fs.fchown(fd, uid, gid, function(err) {
-                            fs.close(fd);
-                            if (err) return error(err);
-                            
-                            pipe(fs.WriteStream(tempPath, {
-                                encoding: options.encoding || null,
-                                mode: mode
-                            }));
-                        });
-                    });
-                }
+                });
             });
         }
 
@@ -592,7 +563,7 @@ module.exports = function setup(fsOptions) {
             else {
                 writable.on('open', function () {
                     if (hadError) return;
-                    meta.stream = wrapStream(writable);
+                    meta.stream = writable;
                     callback();
                 });
             }
@@ -608,80 +579,11 @@ module.exports = function setup(fsOptions) {
             resume();
         }
         
-        function wrapStream(stream) {
-            var emitter = new EventEmitter();
-            var wrapper = {};
-            
-            for (var key in stream) {
-                if (key !== "on" && key !== "addListener") {
-                    (function(key) {
-                        Object.defineProperty(wrapper, key, {
-                            get : function() { return stream[key] },
-                            set : function(value){ stream[key] = value; },
-                            enumerable : true,
-                            configurable : true
-                       });
-                    })(key);
-                }
-            }
-                    
-            wrapper.on = wrapper.addListener = function(type, varargs) {
-                if (type == "close")
-                    return emitter.on.apply(emitter, arguments);
-                else
-                    return stream.on.apply(stream, arguments);
-            };
-
-            wrapper._close = function() {
-                emitter.emit("close");
-                wrapper.on = wrapper.addListener = stream.on.bind(stream);
-            };
-            
-            return wrapper;
-        }
-        
         function swap() {
             fs.rename(tempPath, resolvedPath, function (err) {
-                if (err && err.code == "EXDEV") {
-                    // if $TEMP is on a different decive copy the file
-                    copyFile(tempPath, resolvedPath, function(err) {
-                        fs.unlink(tempPath, function() {});
-                        if (err) return error(err);
-
-                        if (meta.stream) meta.stream._close();
-                        callback();
-                    });
-                    return;
-                }
                 if (err) return error(err);
-
-                if (meta.stream) meta.stream._close();
                 callback();
             });
-        }
-        
-        function copyFile(source, target, callback) {
-            var cbCalled = false;
-            
-            var rd = fs.createReadStream(source);
-            rd.on("error", function(err) {
-                done(err);
-            });
-            var wr = fs.createWriteStream(target);
-            wr.on("error", function(err) {
-                done(err);
-            });
-            wr.on("close", function(ex) {
-                done();
-            });
-            rd.pipe(wr);
-          
-            function done(err) {
-                if (!cbCalled) {
-                    callback(err);
-                    cbCalled = true;
-                }
-            }
         }
     }
 
