@@ -31,7 +31,7 @@ module.exports = function setup(fsOptions) {
             console.log("PTY is not supported.");
         };
     }
-        
+
     // Get the separator char. In Node 0.8, we can use path.sep instead
     var pathSep = pathNormalize("/");
     
@@ -46,6 +46,9 @@ module.exports = function setup(fsOptions) {
     
     if (pathSep == "/" && root[0] !== "/") throw new Error("root path must start in /");
     if (root[root.length - 1] !== pathSep) root += pathSep;
+    // root = "/" doesn't work on windows
+    if (pathSep == "\\" && root == "/") root = "";
+
     var base = root.substr(0, root.length - 1);
     // root = "/" doesn't work on windows
     if (pathSep == "\\" && root == pathSep) root = "";
@@ -89,7 +92,6 @@ module.exports = function setup(fsOptions) {
 
         // Process Management
         spawn: spawn,
-        pty: ptyspawn,
         execFile: execFile,
 
         // Basic async event emitter style API
@@ -824,15 +826,15 @@ module.exports = function setup(fsOptions) {
             listeners  = [];
             watcher.removeListener("change", listen);
             watcher.close();
-        }
+        };
         
         this.on = function(name, fn){
             if (name != "change")
                 watcher.on.apply(watcher, arguments);
             else {
-                listeners.push(fn)
+                listeners.push(fn);
             }
-        }
+        };
         
         this.removeListener = function(name, fn){
             if (name != "change")
@@ -840,7 +842,7 @@ module.exports = function setup(fsOptions) {
             else {
                 listeners.splice(listeners.indexOf(fn), 1);
             }
-        }
+        };
         
         watch();
     }
