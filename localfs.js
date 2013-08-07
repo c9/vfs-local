@@ -842,6 +842,11 @@ module.exports = function setup(fsOptions) {
             }
         };
         
+        this.removeAllListeners = function() {
+            listeners = [];
+            watcher.removeAllListeners();
+        };
+        
         watch();
     }
 
