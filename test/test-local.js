@@ -1,5 +1,8 @@
 /*global describe:false, it:false */
 
+"use server";
+"use mocha";
+
 var expect = require('chai').expect;
 
 describe('vfs-local', function () {
